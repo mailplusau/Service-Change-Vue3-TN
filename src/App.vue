@@ -1,47 +1,55 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
-import TheWelcome from './components/TheWelcome.vue'
+import { onMounted } from "vue";
+import GlobalDialog from "@/components/shared/GlobalDialog.vue";
+import MainView from "@/views/Main.vue";
+import { useMainStore } from "@/stores/main";
+
+const mainStore = useMainStore();
+
+onMounted(() => {
+    mainStore.init();
+})
+
+function addShortcut() {
+    if (top['addShortcut']) top['addShortcut']();
+    else console.error('addShortcut function not found.')
+}
 </script>
 
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="./assets/logo.svg" width="125" height="125" />
+    <v-app>
+        <v-main>
+            <v-container fluid>
+                <v-row class="mx-1" justify="space-between" align="center">
+                    <v-col cols="auto">
+                        <h2 class="text-primary">
+                            {{ mainStore.pageTitle }}
+                        </h2>
+                    </v-col>
 
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-    </div>
-  </header>
+                    <v-col cols="auto">
+                        <a v-if="true" @click="addShortcut" :style="{cursor: 'pointer'}"
+                           class="subtitle-1 text-primary">Add To Shortcuts <v-icon size="20" color="primary">mdi-open-in-new</v-icon></a>
+                    </v-col>
+                </v-row>
+            </v-container>
 
-  <main>
-    <TheWelcome />
-  </main>
+            <v-divider class="mb-3"></v-divider>
+
+            <MainView />
+
+        </v-main>
+    </v-app>
+
+    <GlobalDialog />
 </template>
 
-<style scoped>
-header {
-  line-height: 1.5;
+<style>
+.v-list-item {
+    min-height: 40px !important;
 }
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
+.v-list-item-title {
+    font-size: .85rem !important;
+    font-weight: 500;
 }
 </style>
