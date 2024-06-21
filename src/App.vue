@@ -52,4 +52,14 @@ function addShortcut() {
     font-size: .85rem !important;
     font-weight: 500;
 }
+.cell-text-size {
+    font-size: 11px !important;
+}
+.v-input.v-text-field-no-pl input {
+    padding-left: 0 !important;
+}
+.v-input.v-text-field-primary-color-input input {
+    color: #095c7b;
+    font-weight: bold;
+}
 </style>

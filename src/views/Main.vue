@@ -1,15 +1,9 @@
 <script setup>
-
+import ServiceChangeView from '@/views/services/Main.vue';
 </script>
 
 <template>
-    <v-container>
-        <v-row justify="center">
-            <v-col xl="9" lg="11" cols="12">
-                Contents
-            </v-col>
-        </v-row>
-    </v-container>
+    <ServiceChangeView />
 </template>
 
 <style scoped>

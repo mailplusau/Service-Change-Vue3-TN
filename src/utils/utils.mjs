@@ -1,5 +1,118 @@
+const AUDollar = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'AUD',
+});
+
 export const VARS = {
-    pageTitle: 'Page Loading...',
+    pageTitle: 'Service Change v3',
+}
+
+export const COMM_REG_STATUS = {
+    Cancelled: 3,
+    Changed: 7,
+    In_Trial: 1,
+    Quote: 10,
+    Scheduled: 9,
+    Signed: 2,
+    Trial_Complete: 8
+};
+
+export const SERVICE_CHANGE_STATUS = {
+    Active: 2,
+    Ceased: 3,
+    Inactive: 6,
+    Lead: 5,
+    Quote: 4,
+    Scheduled: 1,
+}
+
+export const commRegDefaults = {
+    id: null,
+    custrecord_date_entry: '',
+    custrecord_comm_date: '',
+    custrecord_comm_date_signup: '',
+    custrecord_sale_type: '',
+    custrecord_in_out: '',
+    custrecord_scand_form: '',
+    custrecord_customer: null,
+    custrecord_salesrep: null,
+    custrecord_franchisee: null,
+    custrecord_trial_status: '',
+    custrecord_commreg_sales_record: null,
+    custrecord_wkly_svcs: '5',
+    custrecord_state: '',
+    custrecord_finalised_by: '',
+    custrecord_finalised_on: '',
+    custrecord_trial_expiry: ''
+};
+
+export const customerDefaults = {
+    entityid: '',
+    companyname: '',
+    vatregnumber: '',
+    partner: '',
+    entitystatus: '',
+
+    custentity_cust_monthly_service_value: 0,
+    custentity_monthly_extra_service_revenue: 0,
+    custentity_monthly_reduc_service_revenue: 0,
+};
+
+export const serviceFieldIds = [
+    "internalid",
+    "name",
+    "isinactive",
+    "custrecord_service_day_adhoc",
+    "custrecord_service_day_fri",
+    "custrecord_service_day_mon",
+    "custrecord_service_day_thu",
+    "custrecord_service_day_tue",
+    "custrecord_service_day_wed",
+    "custrecord_service_gst",
+    "custrecord_service",
+    "custrecord_service_price",
+    "custrecord_service_package",
+    "custrecord_service_category",
+    "custrecord_service_customer",
+    "custrecord_service_franchisee",
+    "custrecord_service_ns_item",
+    "custrecord_service_comm_reg",
+    "custrecord_service_description",
+    "custrecord_service_day_freq_cycle",
+    "custrecord_service_run_scheduled",
+    "custrecord_service_prem_id",
+    "custrecord_service_classification",
+    "custrecord_service_delete_note",
+    "custrecord_service_date_reviewed",
+    "custrecord_service_date_last_price_upd",
+    "custrecord_show_on_app",
+    "custrecord_multiple_operators"
+];
+
+export const serviceChangeDefaults = {
+    internalid: null,
+    custrecord_servicechg_service: '', // Associated service
+    custrecord_servicechg_status: '', // Status
+    custrecord_servicechg_comm_reg: '', // Associated comm reg
+    custrecord_servicechg_type: '', // Service Change Type
+    custrecord_default_servicechg_record: '', // Default Service Change Record: Yes (1), No (2), Sometimes (3), Undecided (4)
+    custrecord_servicechg_created: '', // Created By...
+
+    custrecord_servicechg_date_effective: '', // Date - Effective
+    custrecord_servicechg_date_ceased: '', // Date - Ceased
+    custrecord_trial_end_date: '', //Trial End Date
+
+    custrecord_servicechg_old_price: 0, // Old Price
+    custrecord_servicechg_old_freq: '', // Old Frequency
+    custrecord_servicechg_old_zee: '', // Old Franchisee
+    custrecord_servicechg_new_price: '', // New Price
+    custrecord_servicechg_new_freq: '', // New Frequency
+    custrecord_servicechg_new_zee: '', // New Franchisee
+
+    custrecord_servicechg_cancellation_date: '', // Service Cancellation Date
+    custrecord_servicechg_cancellation_not: '', // Service Cancellation Notice
+    custrecord_servicechg_cancellation_reas: '', // Service Cancellation Reason
+    custrecord_servicechg_cancellation_comp: '', // Service Cancellation Competitor
 }
 
 export function getWindowContext() {
@@ -16,6 +129,9 @@ export const rules = {
     },
     minLength(value, fieldName = 'This field', length) {
         return (value && value.length >= length) || `${fieldName} must be more than ${length} characters`;
+    },
+    minValue(value, fieldName = 'This field', min) {
+        return !value || parseFloat(value) >= parseFloat(min) || `${fieldName} must be greater than ${parseFloat(min)}`;
     },
     abn(value, fieldName = 'This field') {
         if (!value) return true;
@@ -64,6 +180,10 @@ export function allowOnlyNumericalInput(evt) {
     if (!/^[0-9]*$/.test(evt.key) && evt.key.length === 1) // Allow only numbers, assuming evt.key is a string
         evt.preventDefault();
     else return true;
+}
+
+export function formatPrice(price) {
+    return AUDollar.format(price);
 }
 
 export function debounce(fn, wait){

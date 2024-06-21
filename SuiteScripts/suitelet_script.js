@@ -6,7 +6,7 @@
  * @created 17/06/2024
  */
 
-import {VARS} from '@/utils/utils.mjs';
+import {serviceChangeDefaults, serviceFieldIds, VARS} from '@/utils/utils.mjs';
 
 // These variables will be injected during upload. These can be changed under 'netsuite' of package.json
 let htmlTemplateFilename/**/;
@@ -143,29 +143,275 @@ function _writeResponseJson(response, body) {
 }
 
 const getOperations = {
+    'getCurrentUserDetails' : function (response) {
+        _writeResponseJson(response, {
+            id: NS_MODULES.runtime['getCurrentUser']().id,
+            role: NS_MODULES.runtime['getCurrentUser']().role,
+        });
+    },
+    'getSelectOptions' : function (response, {id, type, valueColumnName, textColumnName}) {
+        let {search} = NS_MODULES;
+        let data = [];
 
+        search.create({
+            id, type,
+            filters: ['isinactive', 'is', false],
+            columns: [{name: valueColumnName}, {name: textColumnName}]
+        }).run().each(result => {
+            data.push({value: result['getValue'](valueColumnName), title: result['getValue'](textColumnName)});
+            return true;
+        });
+
+        _writeResponseJson(response, data);
+    },
+    'getServiceTypes' : function (response) {
+        let {search} = NS_MODULES;
+        let data = [];
+
+        let searchResult = search.create({
+            type: 'customrecord_service_type',
+            filters: [
+                {name: 'custrecord_service_type_category', operator: 'anyof', values: [1]},
+            ],
+            columns: [
+                {name: 'internalid'},
+                {name: 'custrecord_service_type_ns_item_array'},
+                {name: 'name'}
+            ]
+        }).run();
+
+        searchResult.each(item => {
+            data.push({value: item['getValue']('internalid'), title: item['getValue']('name')})
+
+            return true;
+        });
+
+        _writeResponseJson(response, data);
+    },
+    'getCommencementRegister' : function (response, {commRegId, fieldIds}) {
+        let {record} = NS_MODULES;
+        let data = {};
+
+        let commRegRecord = record.load({
+            type: 'customrecord_commencement_register',
+            id: commRegId,
+        });
+
+        for (let fieldId of fieldIds) {
+            data[fieldId] = commRegRecord.getValue({fieldId});
+            data[fieldId + '_text'] = commRegRecord.getText({fieldId});
+        }
+
+        _writeResponseJson(response, data);
+    },
+    'getCommRegFromSalesRecordId' : function (response, {salesRecordId, fieldIds}) {
+        let {search} = NS_MODULES;
+        let data = [];
+
+        search.create({
+            type: 'customrecord_commencement_register',
+            filters: [
+                ['custrecord_commreg_sales_record', 'is', salesRecordId], 'AND',
+                ['custrecord_trial_status', 'anyof', [9, 10]], // Scheduled (9) or Quote (10)
+            ],
+            columns: fieldIds
+        }).run().each(result => _processSavedSearchResults(data, result));
+
+        _writeResponseJson(response, data); // return the first result
+    },
+    'getCustomerDetails': function (response, {customerId, fieldIds}) {
+        if (!customerId) throw `Invalid Customer ID: ${customerId}`;
+
+        _writeResponseJson(response, sharedFunctions.getCustomerData(customerId, fieldIds));
+    },
+    'getServicesAndServiceChanges' : function (response, {customerId, commRegId}) {
+        let serviceChanges = sharedFunctions.getServiceChangesByFilters([
+            ["custrecord_servicechg_comm_reg", "is", commRegId],
+            "AND",
+            ["isinactive", "is", false],
+            "AND",
+            ["custrecord_servicechg_status", "anyof", [1, 4]], // Scheduled (1) or Quote (4)
+        ]);
+
+        let services = sharedFunctions.getServicesByFilters([
+            ["custrecord_service_customer", "is", customerId],
+            "AND",
+            [
+                ["isinactive", "is", false],
+                "OR",
+                ["internalid", "anyof", serviceChanges.map(item => item.custrecord_servicechg_service)]
+            ],
+            "AND",
+            ["custrecord_service_category", "is", 1], // Service Category: Services (1)
+        ]);
+
+
+        _writeResponseJson(response, {services, serviceChanges});
+    },
 }
 
 const postOperations = {
-    'verifyParameters' : function (response, {customerId, salesRecordId = null} = {}) {
-        let {record, runtime} = NS_MODULES;
+    'verifyParameters' : function (response, {customerId, salesRecordId, commRegId}) {
+        customerId = parseInt(customerId);
 
         if (salesRecordId) {
-            let salesRecord = record.load({type: 'customrecord_sales', id: salesRecordId, isDynamic: true});
+            let associatedCustomerId = NS_MODULES.search['lookupFields']({
+                type: 'customrecord_sales',
+                id: salesRecordId,
+                columns: ['custrecord_sales_customer']
+            })['custrecord_sales_customer']?.[0]?.value;
 
-            if (parseInt(salesRecord.getValue({fieldId: 'custrecord_sales_customer'})) === parseInt(customerId))
-                _writeResponseJson(response, {
-                    customerId: parseInt(customerId),
-                    salesRecordId: parseInt(salesRecordId),
-                    userId: runtime['getCurrentUser']().id,
-                    userRole: runtime['getCurrentUser']().role,
-                });
-            else _writeResponseJson(response, {error: `IDs mismatched. Sales record #${salesRecordId} does not belong to customer #${customerId}.`});
-        } else _writeResponseJson(response, {
-            customerId: parseInt(customerId),
-            salesRecordId: null,
-            userId: runtime['getCurrentUser']().id,
-            userRole: runtime['getCurrentUser']().role,
-        });
+            if (parseInt(associatedCustomerId) !== customerId)
+                throw `IDs mismatched. Sales record #${salesRecordId} does not belong to customer #${customerId}.`;
+
+            salesRecordId = parseInt(salesRecordId);
+        }
+
+        if (commRegId) {
+            let associatedSalesRecordId = NS_MODULES.search['lookupFields']({
+                type: 'customrecord_commencement_register',
+                id: commRegId,
+                columns: ['custrecord_commreg_sales_record']
+            })['custrecord_commreg_sales_record']?.[0]?.value;
+
+            if (parseInt(associatedSalesRecordId) !== salesRecordId)
+                throw `IDs mismatched. Commencement Register #${commRegId} does not belong to sales record #${salesRecordId}.`;
+
+            commRegId = parseInt(commRegId);
+        }
+
+        _writeResponseJson(response, { customerId, salesRecordId, commRegId });
     },
+    'saveService' : function(response, {serviceId, serviceData}) {
+        let serviceRecord = serviceId ?
+            NS_MODULES.record.load({type: 'customrecord_service', id: serviceId, isDynamic: true}) :
+            NS_MODULES.record.create({type: 'customrecord_service', isDynamic: true});
+
+        for (let key in serviceData) serviceRecord.setValue({fieldId: key, value: serviceData[key]});
+
+        _writeResponseJson(response, serviceRecord.save({ignoreMandatoryFields: true}));
+    },
+    'saveServiceChange' : function(response, {serviceChangeData}) {
+        let {record, search} = NS_MODULES;
+        let needInactiveBypass = false;
+        let isoStringRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/;
+
+        // Save the service change record
+        let serviceChangeFields = {...serviceChangeDefaults};
+        let serviceChangeRecord = serviceChangeData.internalid ?
+            record.load({type: 'customrecord_servicechg', id: serviceChangeData.internalid, isDynamic: true}) :
+            record.create({type: 'customrecord_servicechg', isDynamic: true});
+
+        // check if we need to temporarily set the service record to active
+        if (search['lookupFields']({type: 'customrecord_service', id: serviceChangeData['custrecord_servicechg_service'], columns: ['isinactive']})['isinactive']) {
+            needInactiveBypass = true;
+            record['submitFields']({type: 'customrecord_service', id: serviceChangeData['custrecord_servicechg_service'], values: {'isinactive': false}});
+        }
+
+        delete serviceChangeFields.internalid;
+
+        for (let key in serviceChangeFields)
+            if (['custrecord_servicechg_old_freq', 'custrecord_servicechg_new_freq'].includes(key))
+                serviceChangeRecord.setValue({fieldId: key, value: serviceChangeData[key] ? serviceChangeData[key].split(',') : []});
+            else
+                serviceChangeRecord.setValue({
+                    fieldId: key,
+                    value: isoStringRegex.test(serviceChangeData[key]) ? new Date(serviceChangeData[key].replace(/[Z,z]/gi, '')) : serviceChangeData[key]
+                });
+
+        let serviceChangeId = serviceChangeRecord.save({ignoreMandatoryFields: true})
+
+        if (needInactiveBypass) // set the service record back to inactive
+            record['submitFields']({type: 'customrecord_service', id: serviceChangeData['custrecord_servicechg_service'], values: {'isinactive': true}});
+
+        _writeResponseJson(response, serviceChangeId);
+    },
+    'createCommencementRegister' : function(response, {customerId, salesRecordId, saleTypeId, commRegStatus, commencementDate, trialEndDate}) {
+        let {record, runtime} = NS_MODULES;
+        let userId = runtime['getCurrentUser']().id;
+        let userRole = runtime['getCurrentUser']().role;
+        let customerRecord = record.load({type: 'customer', id: customerId});
+        let partnerId = parseInt(customerRecord.getValue({fieldId: 'partner'}));
+        let partnerRecord = record.load({type: 'partner', id: partnerId});
+        let state = partnerRecord.getValue({fieldId: 'location'});
+
+        let commRegRecord = record.create({type: 'customrecord_commencement_register'});
+
+        commRegRecord.setValue({fieldId: 'custrecord_date_entry', value: new Date()});
+        commRegRecord.setValue({fieldId: 'custrecord_comm_date', value: new Date(commencementDate.replace(/[Z,z]/gi, ''))});
+        commRegRecord.setValue({fieldId: 'custrecord_comm_date_signup', value: new Date()});
+        commRegRecord.setValue({fieldId: 'custrecord_customer', value: customerId});
+        commRegRecord.setValue({fieldId: 'custrecord_salesrep', value: userId});
+        commRegRecord.setValue({fieldId: 'custrecord_std_equiv', value: 1}); // Standard Equivalent
+        commRegRecord.setValue({fieldId: 'custrecord_wkly_svcs', value: '5'}); // Weekly Services
+        commRegRecord.setValue({fieldId: 'custrecord_in_out', value: 2}); // Inbound
+        commRegRecord.setValue({fieldId: 'custrecord_state', value: state});
+        commRegRecord.setValue({fieldId: 'custrecord_trial_status', value: commRegStatus}); // Quote (10) or Scheduled (9)
+        commRegRecord.setValue({fieldId: 'custrecord_sale_type', value: saleTypeId});
+
+        if (trialEndDate) commRegRecord.setValue({fieldId: 'custrecord_trial_expiry', value: new Date(trialEndDate.replace(/[Z,z]/gi, ''))});
+
+        if (userRole !== 1000) commRegRecord.setValue({fieldId: 'custrecord_franchisee', value: partnerId});
+        if (salesRecordId) commRegRecord.setValue({fieldId: 'custrecord_commreg_sales_record', value: salesRecordId});
+
+        let commRegId = commRegRecord.save({ignoreMandatoryFields: true});
+
+        _writeResponseJson(response, commRegId); // return the first result
+    }
 };
+
+const sharedFunctions = {
+    getCustomerData(customerId, fieldIds) {
+        let {record} = NS_MODULES;
+        let data = {};
+
+        let customerRecord = record.load({
+            type: record.Type.CUSTOMER,
+            id: customerId,
+        });
+
+        for (let fieldId of fieldIds) {
+            data[fieldId] = customerRecord.getValue({fieldId});
+            data[fieldId + '_text'] = customerRecord.getText({fieldId});
+        }
+
+        return data;
+    },
+
+    getServicesByFilters(filters) {
+        let data = [];
+
+        NS_MODULES.search.create({
+            type: "customrecord_service",
+            filters,
+            columns: serviceFieldIds
+        }).run().each(result => _processSavedSearchResults(data, result));
+
+        return data;
+    },
+    getServiceChangesByFilters(filters) {
+        let serviceChangeFieldIds = [];
+        let data = [];
+
+        for (let key in serviceChangeDefaults) serviceChangeFieldIds.push(key);
+
+        NS_MODULES.search.create({
+            type: "customrecord_servicechg",
+            filters,
+            columns: serviceChangeFieldIds
+        }).run().each(result => _processSavedSearchResults(data, result));
+
+        return data;
+    }
+}
+
+function _processSavedSearchResults(data, result) {
+    let tmp = {};
+    for (let column of result['columns']) {
+        tmp[column.name] = result['getValue'](column);
+        tmp[column.name + '_text'] = result['getText'](column);
+    }
+    data.push(tmp);
+
+    return true;
+}
