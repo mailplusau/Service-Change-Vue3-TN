@@ -13,6 +13,7 @@ let htmlTemplateFilename/**/;
 let clientScriptFilename/**/;
 
 const defaultTitle = VARS.pageTitle;
+const isoStringRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/;
 
 let NS_MODULES = {};
 
@@ -291,10 +292,21 @@ const postOperations = {
 
         _writeResponseJson(response, serviceRecord.save({ignoreMandatoryFields: true}));
     },
+    'cancelChangesOfService' : function(response, {serviceId, commRegId}) {
+        let serviceChanges = sharedFunctions.getServiceChangesByFilters([
+            ["custrecord_servicechg_service", "is", serviceId],
+            "AND",
+            ["custrecord_servicechg_comm_reg", "is", commRegId],
+        ]);
+
+        for (let serviceChange of serviceChanges)
+            NS_MODULES.record.delete({type: 'customrecord_servicechg', id: serviceChange.internalid});
+
+        _writeResponseJson(response, `Changes for service ID ${serviceId} has been cancelled.`);
+    },
     'saveServiceChange' : function(response, {serviceChangeData}) {
         let {record, search} = NS_MODULES;
         let needInactiveBypass = false;
-        let isoStringRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/;
 
         // Save the service change record
         let serviceChangeFields = {...serviceChangeDefaults};
@@ -357,6 +369,64 @@ const postOperations = {
         let commRegId = commRegRecord.save({ignoreMandatoryFields: true});
 
         _writeResponseJson(response, commRegId); // return the first result
+    },
+    'updateServiceRatesOfCustomer' : function (response, {customerId, commRegId}) {
+        let {monthlyServiceRate, monthlyExtraServiceRate, monthlyReducedServiceRate} = _calculateServiceRates(customerId, commRegId);
+
+        NS_MODULES.record['submitFields']({
+            type: 'customer', id: customerId,
+            values: {
+                'custentity_cust_monthly_service_value': monthlyServiceRate,
+                'custentity_monthly_extra_service_revenue': monthlyExtraServiceRate,
+                'custentity_monthly_reduc_service_revenue': monthlyReducedServiceRate,
+            }
+        });
+
+        _writeResponseJson(response, { monthlyServiceRate, monthlyExtraServiceRate, monthlyReducedServiceRate });
+    },
+    'updateEffectiveDate' : function (response, {commRegId, dateEffective}) {
+        if (!isoStringRegex.test(dateEffective)) throw `Effective date [${dateEffective}] is not a valid date`;
+        if (!commRegId) throw `Commencement Register ID not specified`;
+
+        dateEffective = new Date(dateEffective.replace(/[Z,z]/gi, ''));
+        let {record} = NS_MODULES;
+        let serviceChanges = sharedFunctions.getServiceChangesByFilters([
+            ["custrecord_servicechg_comm_reg", "is", commRegId],
+            "AND",
+            ["custrecord_servicechg_status", "anyof", [1, 4]], // Scheduled (1) or Quote (4)
+            "AND",
+            ["isinactive", "is", false],
+        ]);
+
+        serviceChanges.forEach(item => {
+            record['submitFields']({type: 'customrecord_servicechg', id: item.id, values: {'custrecord_servicechg_date_effective': dateEffective}});
+        });
+
+        record['submitFields']({type: 'customrecord_commencement_register', id: commRegId, values: {'custrecord_comm_date': dateEffective}});
+
+        _writeResponseJson(response, `Effective date has been set to ${dateEffective}`);
+    },
+    'updateTrialEndDate' : function (response, {commRegId, trialEndDate}) {
+        if (!isoStringRegex.test(trialEndDate)) throw `Effective date [${trialEndDate}] is not a valid date`;
+        if (!commRegId) throw `Commencement Register ID not specified`;
+
+        trialEndDate = new Date(trialEndDate.replace(/[Z,z]/gi, ''));
+        let {record} = NS_MODULES;
+        let serviceChanges = sharedFunctions.getServiceChangesByFilters([
+            ["custrecord_servicechg_comm_reg", "is", commRegId],
+            "AND",
+            ["custrecord_servicechg_status", "anyof", [1, 4]], // Scheduled (1) or Quote (4)
+            "AND",
+            ["isinactive", "is", false],
+        ]);
+
+        serviceChanges.forEach(item => {
+            record['submitFields']({type: 'customrecord_servicechg', id: item.id, values: {'custrecord_servicechg_date_effective': trialEndDate}});
+        });
+
+        record['submitFields']({type: 'customrecord_commencement_register', id: commRegId, values: {'custrecord_comm_date': trialEndDate}});
+
+        _writeResponseJson(response, `Trial end date has been set to ${trialEndDate}`);
     }
 };
 
@@ -414,4 +484,57 @@ function _processSavedSearchResults(data, result) {
     data.push(tmp);
 
     return true;
+}
+
+function _calculateServiceRates(customerId, commRegId) {
+    let serviceChanges = sharedFunctions.getServiceChangesByFilters([
+        ["custrecord_servicechg_comm_reg", "is", commRegId],
+        "AND",
+        ["custrecord_servicechg_status", "anyof", [1, 4]], // Scheduled (1) or Quote (4)
+        "AND",
+        ["isinactive", "is", false],
+    ]);
+    let assignedServices = sharedFunctions.getServicesByFilters([
+        ["custrecord_service_customer", "is", customerId],
+        "AND",
+        ["custrecord_service_category", "is", 1], // Service Category: Services (1)
+        "AND",
+        [
+            ["isinactive", "is", false],
+            "OR",
+            ["internalid", "anyof", serviceChanges.map(item => item.custrecord_servicechg_service)]
+        ],
+    ]);
+    let monthlyServiceRate = 0.0, monthlyExtraServiceRate = 0.0, monthlyReducedServiceRate = 0.0;
+    let freqTerms = ['mon', 'tue', 'wed', 'thu', 'fri', 'adhoc'];
+
+    [...serviceChanges, ...assignedServices].forEach(item => {
+        let weeklyServiceRate = 0, weeklyExtraServiceRate = 0, weeklyReducedServiceRate = 0;
+        let newPrice = parseFloat(item['custrecord_servicechg_new_price']) || parseFloat(item['custrecord_service_price']) || 0;
+
+        freqTerms.forEach(term => {
+            if (item['custrecord_service_day_' + term]) {
+                weeklyServiceRate += newPrice;
+
+                weeklyExtraServiceRate += ['Extra Service', 'Increase of Frequency'].includes(item['custrecord_servicechg_type']) ?
+                    newPrice : 0;
+
+                weeklyReducedServiceRate += ['Reduction of Service', 'Price Decrease', 'Decrease of Frequency'].includes(item['custrecord_servicechg_type']) ?
+                    newPrice : 0;
+            }
+        });
+
+        let monthlyRateServices = [30, 31, 32, 33, 34, 35, 36, 37, 38]; // Fixed Charge (30) and all NeoPost Packages
+
+        // If this service type is Fixed Charge (30), we keep the rates as is
+        // because Fixed Charge service's price is monthly rate instead of weekly rate.
+        monthlyServiceRate += (monthlyRateServices.includes(parseInt(item['custrecord_service'])) || item['custrecord_service_day_adhoc'])
+            ? newPrice : weeklyServiceRate * 4.25;
+        monthlyExtraServiceRate += (monthlyRateServices.includes(parseInt(item['custrecord_service'])) && weeklyExtraServiceRate > 0)
+            ? newPrice : weeklyExtraServiceRate * 4.25;
+        monthlyReducedServiceRate += (monthlyRateServices.includes(parseInt(item['custrecord_service'])) && weeklyReducedServiceRate > 0)
+            ? newPrice : weeklyReducedServiceRate * 4.25;
+    })
+
+    return {monthlyServiceRate, monthlyExtraServiceRate, monthlyReducedServiceRate};
 }

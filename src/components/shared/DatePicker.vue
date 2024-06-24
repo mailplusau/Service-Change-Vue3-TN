@@ -1,8 +1,9 @@
 <script setup>
-import {ref, defineModel, onMounted, computed, onBeforeMount, watch} from "vue";
+import {ref, defineModel, computed, watch, defineEmits} from "vue";
 const model = defineModel({
     required: true,
 });
+const emit = defineEmits(['dateChanged']);
 const props = defineProps({
     readonly: {
         type: Boolean,
@@ -22,8 +23,10 @@ const dateFormat = new Intl.DateTimeFormat('en-AU', {
 });
 
 function update() {
-    model.value = selectedDate.value;
     dialogOpen.value = false;
+    if (model.value === selectedDate.value) return;
+    model.value = selectedDate.value;
+    emit('dateChanged', selectedDate.value);
 }
 
 watch(dialogOpen, (val) => {

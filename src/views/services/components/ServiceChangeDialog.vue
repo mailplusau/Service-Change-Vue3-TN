@@ -66,7 +66,7 @@ async function saveServiceChange() {
         <v-card class="bg-background">
             <v-container>
                 <v-row>
-                    <v-col cols="12" class="text-center">{{dialogTitle}}</v-col>
+                    <v-col cols="12" class="text-center font-weight-bold text-primary">{{dialogTitle}}</v-col>
                 </v-row>
                 <v-form class="v-row justify-center align-center" ref="serviceChangeForm" v-model="formValid">
                     <v-col cols="6">

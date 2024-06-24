@@ -7,6 +7,7 @@ import {useUserStore} from '@/stores/user';
 import {useMainStore} from '@/stores/main';
 import {useDataStore} from '@/stores/data';
 import {useGlobalDialog} from '@/stores/global-dialog';
+import {serviceChanges, services} from '@/utils/testData';
 
 const state = {
     data: {
@@ -32,9 +33,13 @@ const state = {
     serviceTypesInUse: [],
     globalEffectiveDate: new Date(),
     globalTrialEndDate: null,
+
+    serviceIdToCease: null,
 };
 
 state.changeDialog.form = {...state.changeDialog.defaults};
+state.data.all = [...services]
+state.changes.all = [...serviceChanges]
 
 const getters = {
 
@@ -99,6 +104,23 @@ const actions = {
 
         this.changeDialog.open = true;
     },
+    async handleEffectiveDateChanged() {
+        useGlobalDialog().displayBusy('Processing', 'Applying new effective date. Please wait...');
+
+        await http.post('updateEffectiveDate', {commRegId: useCommRegStore().id, dateEffective: this.globalEffectiveDate});
+        useCommRegStore().details.custrecord_comm_date = this.globalEffectiveDate.toISOString();
+        useCommRegStore().details.custrecord_comm_date_text = this.globalEffectiveDate.toLocaleDateString();
+        for (let serviceChange of this.changes.all) serviceChange['custrecord_servicechg_date_effective'] = this.globalEffectiveDate.toLocaleDateString();
+
+        useGlobalDialog().close();
+    },
+    async handleTrialEndDateChanged() {
+        useGlobalDialog().displayBusy('Processing', 'Applying new effective date. Please wait...');
+
+        await http.post('updateTrialEndDate', {commRegId: useCommRegStore().id, trialEndDate: this.globalTrialEndDate});
+
+        useGlobalDialog().close();
+    },
     async saveServiceChange() {
         useGlobalDialog().displayBusy('Processing', 'Saving Service Change...');
 
@@ -142,9 +164,24 @@ const actions = {
 
         await http.post('saveServiceChange', {serviceChangeData});
 
+        await http.post('updateServiceRatesOfCustomer', {customerId: useCustomerStore().id, commRegId: useCommRegStore().id});
+
         await _fetchAllData(this);
 
         this.changeDialog.open = false;
+        useGlobalDialog().close();
+    },
+    async cancelChangesOfService(serviceId) {
+        let service = _findServiceById(this, serviceId);
+
+        if (!service) return;
+
+        useGlobalDialog().displayBusy('Processing', `Removing all pending changes of Service [${service.custrecord_service_text}]`);
+
+        await http.post('cancelChangesOfService', {serviceId, commRegId: useCommRegStore().id});
+
+        await _fetchAllData(this);
+
         useGlobalDialog().close();
     }
 };

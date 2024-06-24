@@ -34,13 +34,17 @@ const priceCell = computed(() => {
     }
 })
 
+function cancelServiceChange() {
+    serviceStore.cancelChangesOfService(item['internalid']);
+}
+
 </script>
 
 <template>
     <tr class="service-expanded-info text-grey-darken-2" v-if="item['isinactive']">
         <td class="pl-7" :colspan="columns.length">
             <v-icon class="mr-2">mdi-subdirectory-arrow-right</v-icon>
-            <v-chip label color="green-darken-4" size="small">
+            <v-chip label color="green-darken-4" size="x-small">
                 New Service
             </v-chip>
         </td>
@@ -48,12 +52,12 @@ const priceCell = computed(() => {
     <tr class="service-expanded-info text-grey-darken-2" v-else-if="!!serviceChange">
         <td class="pl-7">
             <v-icon class="mr-2">mdi-subdirectory-arrow-right</v-icon>
-            <v-chip label color="primary" size="small">
+            <v-chip label color="primary" size="x-small">
                 {{ serviceChange['custrecord_servicechg_type'] }}
             </v-chip>
         </td>
 
-        <td :class="'text-center ' + priceCell.color">
+        <td :class="'text-center ' + priceCell.color" style="font-size: 0.9em">
             <v-icon v-show="!!priceCell.icon" :color="priceCell.iconColor" size="large">{{priceCell.icon}}</v-icon>
             {{ formatCurrency(serviceChange['custrecord_servicechg_new_price']) }}
         </td>
@@ -68,7 +72,23 @@ const priceCell = computed(() => {
         </template>
 
         <td class="text-end">
-            <v-btn color="red" variant="outlined" size="x-small">Cancel</v-btn>
+            <v-menu location="start">
+                <template v-slot:activator="{ props }">
+                    <v-btn v-bind="props" color="red" variant="outlined" size="x-small">Cancel</v-btn>
+                </template>
+
+                <v-card class="bg-primary">
+                    <v-card-item class="text-subtitle-2 pb-0">
+                        Cancel all pending changes for this service?
+                    </v-card-item>
+                    <v-card-actions>
+                        <v-spacer></v-spacer>
+                        <v-btn class="text-none" size="small" color="red" variant="elevated">No</v-btn>
+                        <v-btn class="text-none" size="small" color="green" variant="elevated" @click="cancelServiceChange">Yes</v-btn>
+                        <v-spacer></v-spacer>
+                    </v-card-actions>
+                </v-card>
+            </v-menu>
         </td>
     </tr>
 <!--    <tr>-->
