@@ -46,6 +46,8 @@ const actions = {
         ]);
 
         await useServiceStore().init();
+
+        _updateFormTitleAndHeader(this);
     },
 };
 
@@ -91,6 +93,23 @@ async function _readUrlParams(ctx) {
         ctx.extraParams.freeTrial = (!params['salesrep'] ? weirdParams['free_trial'] === 'T' : params['free_trial'] === 'T') || false;
         ctx.extraParams.dateEffective = weirdParams['date'] || null;
     } catch (e) { console.error(e); }
+}
+
+function _updateFormTitleAndHeader(ctx) {
+    let title, header;
+    const customerStore = useCustomerStore();
+
+    header = 'Add / Edit Service : ';
+
+    header += '<a target="_blank" href="/app/common/entity/custjob.nl?id=' + customerStore.id + '">' + customerStore.details.entityid + '</a> ';
+
+    header += customerStore.details.companyname;
+
+    title = 'Add / Edit Service : ' + customerStore.details.entityid + ' ' + customerStore.details.companyname + ' - NetSuite Australia (Mail Plus Pty Ltd)';
+
+    ctx.pageTitle = header;
+
+    if (getWindowContext().setMPTheme) getWindowContext().setMPTheme(title);
 }
 
 export const useMainStore = defineStore('main', {

@@ -12,7 +12,7 @@ import {serviceChanges, services} from '@/utils/testData';
 const state = {
     data: {
         all: [],
-        loading: false,
+        loading: true,
     },
     changes: {
         all: [],
@@ -31,15 +31,15 @@ const state = {
         loading: false,
     },
     serviceTypesInUse: [],
-    globalEffectiveDate: new Date(),
+    globalEffectiveDate: new Date(new Date().setDate(new Date().getDate() + 1)),
     globalTrialEndDate: null,
 
     serviceIdToCease: null,
 };
 
 state.changeDialog.form = {...state.changeDialog.defaults};
-state.data.all = [...services]
-state.changes.all = [...serviceChanges]
+// state.data.all = [...services]
+// state.changes.all = [...serviceChanges]
 
 const getters = {
 
@@ -47,13 +47,18 @@ const getters = {
 
 const actions = {
     async init() {
-        if (!useCustomerStore().id) return;
-        this.data.loading = true;
+        if (!useCustomerStore().id) return this.data.loading = false;
 
         await _fetchAllData(this);
 
+        if (useCommRegStore().id) {
+            this.globalEffectiveDate = _parseIsoDatetime(useCommRegStore().details.custrecord_comm_date, true);
+            this.globalTrialEndDate = useCommRegStore().details.custrecord_trial_expiry ?
+                _parseIsoDatetime(useCommRegStore().details.custrecord_trial_expiry, true) : null;
+        } else if (useMainStore().extraParams.freeTrial)
+            this.globalTrialEndDate = new Date((new Date(this.globalEffectiveDate.toISOString())).setDate(this.globalEffectiveDate.getDate() + 8));
+
         // Setting up some default values
-        if (useCommRegStore().id) this.globalEffectiveDate = new Date(useCommRegStore().details.custrecord_comm_date)
         this.changeDialog.defaults.custrecord_servicechg_old_price = 0;
         this.changeDialog.defaults.custrecord_servicechg_old_zee = useCustomerStore().details.partner;
         this.changeDialog.defaults.custrecord_servicechg_comm_reg = useCommRegStore().id;
@@ -109,15 +114,18 @@ const actions = {
 
         await http.post('updateEffectiveDate', {commRegId: useCommRegStore().id, dateEffective: this.globalEffectiveDate});
         useCommRegStore().details.custrecord_comm_date = this.globalEffectiveDate.toISOString();
-        useCommRegStore().details.custrecord_comm_date_text = this.globalEffectiveDate.toLocaleDateString();
+        useCommRegStore().texts.custrecord_comm_date = this.globalEffectiveDate.toLocaleDateString();
         for (let serviceChange of this.changes.all) serviceChange['custrecord_servicechg_date_effective'] = this.globalEffectiveDate.toLocaleDateString();
 
         useGlobalDialog().close();
     },
     async handleTrialEndDateChanged() {
-        useGlobalDialog().displayBusy('Processing', 'Applying new effective date. Please wait...');
+        useGlobalDialog().displayBusy('Processing', 'Applying new trial expiry date. Please wait...');
 
         await http.post('updateTrialEndDate', {commRegId: useCommRegStore().id, trialEndDate: this.globalTrialEndDate});
+        useCommRegStore().details.custrecord_trial_expiry = this.globalTrialEndDate.toISOString();
+        useCommRegStore().texts.custrecord_trial_expiry = this.globalTrialEndDate.toLocaleDateString();
+        for (let serviceChange of this.changes.all) serviceChange['custrecord_trial_end_date'] = this.globalEffectiveDate.toLocaleDateString();
 
         useGlobalDialog().close();
     },
@@ -171,6 +179,10 @@ const actions = {
         this.changeDialog.open = false;
         useGlobalDialog().close();
     },
+    async cancelService() {
+        console.log('cancelling service', this.serviceIdToCease);
+        this.serviceIdToCease = null;
+    },
     async cancelChangesOfService(serviceId) {
         let service = _findServiceById(this, serviceId);
 
@@ -206,6 +218,13 @@ function _findServiceChangeByServiceId(ctx, serviceId) {
     let index = ctx.changes.all.findIndex(item => parseInt(item.custrecord_servicechg_service) === parseInt(serviceId));
 
     return index >= 0 ? ctx.changes.all[index] : null;
+}
+
+function _parseIsoDatetime(dateString, dateOnly = false) {
+    let tmp = dateString.split(/[: T-]/).map(parseFloat);
+    return dateOnly ?
+        new Date(tmp[0], tmp[1] - 1, tmp[2], (new Date().getTimezoneOffset()/-60) + 1, 0, 0, 0) :
+        new Date(tmp[0], tmp[1] - 1, tmp[2], tmp[3] || 0, tmp[4] || 0, tmp[5] || 0, 0);
 }
 
 export const useServiceStore = defineStore('services', {

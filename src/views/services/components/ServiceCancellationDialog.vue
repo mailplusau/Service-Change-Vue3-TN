@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import {useServiceStore} from '@/stores/services';
-import {formatPrice} from '@/utils/utils.mjs';
+import {formatPrice, goToCustomerRecord} from '@/utils/utils.mjs';
 
 const serviceStore = useServiceStore();
 const service = computed(() => {
@@ -23,15 +23,11 @@ const frequencyText = computed(() => {
     if (!service.value) return 'no service';
 
     let freqArray = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Adhoc']
-        .map((item, index) => service.value['custrecord_service_day_' + item.toLowerCase()] ? item : null)
+        .map(item => service.value['custrecord_service_day_' + item.toLowerCase()] ? item : null)
         .filter(item => item);
 
     return freqArray.join(', ')
 })
-
-function anchorClicked() {
-    console.log('anchorClicked');
-}
 
 </script>
 
@@ -48,7 +44,7 @@ function anchorClicked() {
                             <li>Name: <b class="">{{service.custrecord_service_text}}</b></li>
                             <li>Price: <b class="">{{ formatPrice(service.custrecord_service_price) }}</b></li>
                             <li>
-                                Customer: <a class="text-blue cursor-pointer font-weight-bold" @click="anchorClicked">
+                                Customer: <a class="text-blue cursor-pointer font-weight-bold" @click="goToCustomerRecord(service.custrecord_service_customer)">
                                 {{service.custrecord_service_customer_text}} <v-icon size="small">mdi-open-in-new</v-icon></a>
                             </li>
                             <li>Frequency: <b class="">{{frequencyText}}</b></li>

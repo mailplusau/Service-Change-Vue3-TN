@@ -186,6 +186,11 @@ export function formatPrice(price) {
     return AUDollar.format(price);
 }
 
+export function goToCustomerRecord(customerId) {
+    if (!customerId) return;
+    window.open(`${baseUrl}/app/common/entity/custjob.nl?id=${customerId}`, '_blank').focus();
+}
+
 export function debounce(fn, wait){
     let timer;
     return function(...args){

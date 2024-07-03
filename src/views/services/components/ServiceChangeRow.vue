@@ -63,11 +63,9 @@ function cancelServiceChange() {
         </td>
 
         <template v-for="(term) in freqTerms">
-            <td class="text-center" v-if="serviceChange['custrecord_servicechg_new_freq_text'].toLowerCase().split(',').includes(term)">
-                <v-icon color="green" size="small">mdi-check</v-icon>
-            </td>
-            <td class="text-center" v-else>
-                <v-icon color="red" size="small">mdi-close</v-icon>
+            <td :class="item[`custrecord_service_day_${term}`] === serviceChange['custrecord_servicechg_new_freq_text'].toLowerCase().split(',').includes(term) ? 'opacity-40 text-center' : 'text-center'">
+                <v-icon v-if="serviceChange['custrecord_servicechg_new_freq_text'].toLowerCase().split(',').includes(term)" color="green" size="small">mdi-check</v-icon>
+                <v-icon v-else color="red" size="small">mdi-close</v-icon>
             </td>
         </template>
 

@@ -22,13 +22,11 @@ function addShortcut() {
             <v-container fluid>
                 <v-row class="mx-1" justify="space-between" align="center">
                     <v-col cols="auto">
-                        <h2 class="text-primary">
-                            {{ mainStore.pageTitle }}
-                        </h2>
+                        <h2 class="text-primary" v-html="mainStore.pageTitle" style="font-size: 1.3em;"></h2>
                     </v-col>
 
-                    <v-col cols="auto">
-                        <a v-if="true" @click="addShortcut" :style="{cursor: 'pointer'}"
+                    <v-col cols="auto" v-if="false">
+                        <a @click="addShortcut" :style="{cursor: 'pointer'}"
                            class="subtitle-1 text-primary">Add To Shortcuts <v-icon size="20" color="primary">mdi-open-in-new</v-icon></a>
                     </v-col>
                 </v-row>

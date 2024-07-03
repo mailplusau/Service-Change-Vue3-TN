@@ -12,13 +12,17 @@ const props = defineProps({
     title: {
         type: String,
         default: 'Select a date'
+    },
+    disabled: {
+        type: Boolean,
+        default: false,
     }
 })
 const dialogOpen = ref(false);
 const selectedDate = ref();
 
 const dateFormat = new Intl.DateTimeFormat('en-AU', {
-    dateStyle: 'full',
+    dateStyle: 'long',
     timeZone: 'Australia/Sydney',
 });
 
@@ -39,7 +43,7 @@ const displayDate = computed(() => dateFormat.format(model.value))
 <template>
     <v-dialog width="unset" v-model="dialogOpen">
         <template v-slot:activator="{ props: activatorProps }">
-            <slot name="activator" :activatorProps="activatorProps" :displayDate="displayDate" :readonly="props.readonly"></slot>
+            <slot name="activator" :activatorProps="props.disabled ? null : activatorProps" :displayDate="displayDate" :readonly="props.readonly"></slot>
         </template>
 
         <template v-slot:default="{ isActive }">

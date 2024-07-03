@@ -4,8 +4,12 @@ import ServiceChangeRow from '@/views/services/components/ServiceChangeRow.vue';
 import {useServiceStore} from '@/stores/services';
 import ServiceChangeDialog from '@/views/services/components/ServiceChangeDialog.vue';
 import DatePicker from '@/components/shared/DatePicker.vue';
+import ServiceCancellationDialog from '@/views/services/components/ServiceCancellationDialog.vue';
+import {useMainStore} from '@/stores/main';
+import ServiceFinalisationDialog from '@/views/services/components/ServiceFinalisationDialog.vue';
 
 const serviceStore = useServiceStore();
+const mainStore = useMainStore();
 const AUDollar = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'AUD',
@@ -30,53 +34,70 @@ const headers = [
 function formatCurrency(value) {
     return AUDollar.format(value);
 }
+
+function closeParentDialog() {
+    if (parent['closeServiceAndPriceDialog']) parent['closeServiceAndPriceDialog']();
+}
+
+const dataLoading = computed(() => serviceStore.data.loading)
 </script>
 
 <template>
     <v-container fluid>
         <v-row justify="center">
-            <v-col cols="12">
+            <v-col xl="6" lg="8" md="10" cols="12">
 
                 <v-toolbar class="elevation-5 bg-primary" density="compact">
-                    <v-toolbar-title style="flex: none" class="text-subtitle-1">
-                        Effective Date:
-                        <DatePicker v-model="serviceStore.globalEffectiveDate" readonly title="Global Effective Date"
-                                    @date-changed="serviceStore.handleEffectiveDateChanged()">
-                            <template v-slot:activator="{ activatorProps, displayDate, readonly }">
-                                <span v-bind="activatorProps" class="cursor-pointer text-secondary">{{ displayDate }}</span>
-                            </template>
-                        </DatePicker>
-                    </v-toolbar-title>
+                    <span class="ml-4 mr-1">Effective Date:</span>
+                    <span v-if="dataLoading" class="cursor-pointer text-secondary">--/--/--</span>
+                    <DatePicker v-else v-model="serviceStore.globalEffectiveDate" readonly title="Global Effective Date"
+                                @date-changed="serviceStore.handleEffectiveDateChanged()">
+                        <template v-slot:activator="{ activatorProps, displayDate, readonly }">
+                            <span v-bind="activatorProps" class="cursor-pointer text-secondary" title="Click to edit">{{ displayDate }}
+                                <v-icon size="x-small" class="mb-1">mdi-pencil</v-icon>
+                            </span>
+                        </template>
+                    </DatePicker>
 
                     <v-divider vertical class="ml-5"></v-divider>
 
-                    <v-toolbar-title style="flex: none" class="text-subtitle-1" v-if="false">
+                    <v-toolbar-title style="flex: none" class="text-subtitle-1" v-if="!!serviceStore.globalTrialEndDate">
                         Trial Expiry Date:
-                        <DatePicker v-model="serviceStore.globalTrialEndDate" readonly title="Trial Expiry Date"
+                        <DatePicker v-model="serviceStore.globalTrialEndDate" readonly title="Trial Expiry Date" :disabled="dataLoading"
                                     @date-changed="serviceStore.handleTrialEndDateChanged()">
                             <template v-slot:activator="{ activatorProps, displayDate, readonly }">
-                                <span v-bind="activatorProps" class="cursor-pointer text-secondary">{{ displayDate }}</span>
+                            <span v-bind="activatorProps" class="cursor-pointer text-secondary" title="Click to edit">{{ displayDate }}
+                                <v-icon size="x-small" class="mb-1">mdi-pencil</v-icon>
+                            </span>
                             </template>
                         </DatePicker>
                     </v-toolbar-title>
 
                     <v-spacer></v-spacer>
 
-                    <v-btn @click="serviceStore.openServiceChangeDialog()" class="mr-2"
+                    <v-btn @click="serviceStore.openServiceChangeDialog()" class="mr-2" :disabled="dataLoading"
                            color="green" size="small" variant="elevated">Add Service</v-btn>
+
+                    <v-btn v-if="mainStore.standaloneMode" @click="closeParentDialog" class="mr-2" :disabled="dataLoading"
+                           color="green" size="small" variant="elevated">Done & Close</v-btn>
+
+                    <ServiceFinalisationDialog v-else>
+                        <template v-slot:activator="{ activatorProps }">
+                            <v-btn v-bind="activatorProps" class="mr-2" color="green" size="small" variant="elevated" :disabled="dataLoading">
+                                Proceed <v-icon>mdi-chevron-right</v-icon>
+                            </v-btn>
+                        </template>
+                    </ServiceFinalisationDialog>
                 </v-toolbar>
 
-                <v-data-table
-                    class="elevation-5 bg-background"
-                    :headers="headers"
-                    :items="serviceStore.data.all"
-                    :items-per-page="-1"
-                    hide-default-footer
-                    item-value="internalid"
-                    :cell-props="{ class: 'cell-text-size' }"
-                    hover density="compact"
-                    :loading="serviceStore.data.loading"
-                    v-model:expanded="expanded">
+                <v-data-table class="elevation-5 bg-background" hide-default-footer
+                              item-value="internalid" hover density="compact"
+                              :headers="headers"
+                              :items="serviceStore.data.all"
+                              :items-per-page="-1"
+                              :cell-props="{ class: 'cell-text-size' }"
+                              :loading="serviceStore.data.loading"
+                              v-model:expanded="expanded">
 
                     <template v-slot:[`item.custrecord_service_text`]="{ item }">
                         <b class="primary-text">{{ item.custrecord_service_text }}</b>
@@ -109,6 +130,7 @@ function formatCurrency(value) {
         </v-row>
 
         <ServiceChangeDialog />
+        <ServiceCancellationDialog />
     </v-container>
 </template>
 

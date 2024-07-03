@@ -249,6 +249,9 @@ const getOperations = {
 
         _writeResponseJson(response, {services, serviceChanges});
     },
+    'getScriptUrl' : function (response, {scriptId, deploymentId, params, returnExternalUrl = false}) {
+        _writeResponseJson(response, NS_MODULES.url['resolveScript']({scriptId, deploymentId, params, returnExternalUrl}));
+    },
 }
 
 const postOperations = {
@@ -361,7 +364,8 @@ const postOperations = {
         commRegRecord.setValue({fieldId: 'custrecord_trial_status', value: commRegStatus}); // Quote (10) or Scheduled (9)
         commRegRecord.setValue({fieldId: 'custrecord_sale_type', value: saleTypeId});
 
-        if (trialEndDate) commRegRecord.setValue({fieldId: 'custrecord_trial_expiry', value: new Date(trialEndDate.replace(/[Z,z]/gi, ''))});
+        if (trialEndDate && isoStringRegex.test(trialEndDate))
+            commRegRecord.setValue({fieldId: 'custrecord_trial_expiry', value: new Date(trialEndDate.replace(/[Z,z]/gi, ''))});
 
         if (userRole !== 1000) commRegRecord.setValue({fieldId: 'custrecord_franchisee', value: partnerId});
         if (salesRecordId) commRegRecord.setValue({fieldId: 'custrecord_commreg_sales_record', value: salesRecordId});
@@ -421,10 +425,10 @@ const postOperations = {
         ]);
 
         serviceChanges.forEach(item => {
-            record['submitFields']({type: 'customrecord_servicechg', id: item.id, values: {'custrecord_servicechg_date_effective': trialEndDate}});
+            record['submitFields']({type: 'customrecord_servicechg', id: item.id, values: {'custrecord_trial_end_date': trialEndDate}});
         });
 
-        record['submitFields']({type: 'customrecord_commencement_register', id: commRegId, values: {'custrecord_comm_date': trialEndDate}});
+        record['submitFields']({type: 'customrecord_commencement_register', id: commRegId, values: {'custrecord_trial_expiry': trialEndDate}});
 
         _writeResponseJson(response, `Trial end date has been set to ${trialEndDate}`);
     }
