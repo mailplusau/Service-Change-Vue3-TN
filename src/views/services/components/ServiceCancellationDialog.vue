@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import {useServiceStore} from '@/stores/services';
-import {formatPrice, goToCustomerRecord} from '@/utils/utils.mjs';
+import {formatPrice, formatDate, goToCustomerRecord} from '@/utils/utils.mjs';
 
 const serviceStore = useServiceStore();
 const service = computed(() => {
@@ -38,8 +38,10 @@ const frequencyText = computed(() => {
                 <v-row justify="center">
                     <v-col cols="auto"><v-icon size="x-large" color="red">mdi-alert-outline</v-icon></v-col>
                     <v-col cols="12">
-                        <p v-if="service && service['isinactive']">The following service will be <b class="text-red">immediately removed</b> because it is a new service pending effective date:</p>
-                        <p v-else>The following service will be <b class="text-red">cancelled</b> on effective date:</p>
+                        <p v-if="service && service['isinactive']">
+                            The following service will be <b class="text-red">removed immediately</b> because it is a new service pending effective date:</p>
+                        <p v-else>
+                            The following service will <b class="text-red">Stop</b> on effective date (<b>{{formatDate(serviceStore.globalEffectiveDate)}}</b>):</p>
                         <ul v-if="service" class="ml-5 my-2 text-body-2">
                             <li>Name: <b class="">{{service.custrecord_service_text}}</b></li>
                             <li>Price: <b class="">{{ formatPrice(service.custrecord_service_price) }}</b></li>

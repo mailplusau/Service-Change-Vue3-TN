@@ -3,6 +3,11 @@ const AUDollar = new Intl.NumberFormat('en-US', {
     currency: 'AUD',
 });
 
+const dateFormat = new Intl.DateTimeFormat('en-AU', {
+    dateStyle: 'long',
+    timeZone: 'Australia/Sydney',
+});
+
 export const VARS = {
     pageTitle: 'Service Change v3',
 }
@@ -27,7 +32,7 @@ export const SERVICE_CHANGE_STATUS = {
 }
 
 export const commRegDefaults = {
-    id: null,
+    internalid: null,
     custrecord_date_entry: '',
     custrecord_comm_date: '',
     custrecord_comm_date_signup: '',
@@ -95,7 +100,7 @@ export const serviceChangeDefaults = {
     custrecord_servicechg_status: '', // Status
     custrecord_servicechg_comm_reg: '', // Associated comm reg
     custrecord_servicechg_type: '', // Service Change Type
-    custrecord_default_servicechg_record: '', // Default Service Change Record: Yes (1), No (2), Sometimes (3), Undecided (4)
+    custrecord_default_servicechg_record: '1', // Default Service Change Record: Yes (1), No (2), Sometimes (3), Undecided (4)
     custrecord_servicechg_created: '', // Created By...
 
     custrecord_servicechg_date_effective: '', // Date - Effective
@@ -184,6 +189,10 @@ export function allowOnlyNumericalInput(evt) {
 
 export function formatPrice(price) {
     return AUDollar.format(price);
+}
+
+export function formatDate(date) {
+    return dateFormat.format(date)
 }
 
 export function goToCustomerRecord(customerId) {

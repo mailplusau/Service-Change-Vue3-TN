@@ -226,13 +226,13 @@ const getOperations = {
         _writeResponseJson(response, sharedFunctions.getCustomerData(customerId, fieldIds));
     },
     'getServicesAndServiceChanges' : function (response, {customerId, commRegId}) {
-        let serviceChanges = sharedFunctions.getServiceChangesByFilters([
+        let serviceChanges = commRegId ? sharedFunctions.getServiceChangesByFilters([
             ["custrecord_servicechg_comm_reg", "is", commRegId],
             "AND",
             ["isinactive", "is", false],
             "AND",
             ["custrecord_servicechg_status", "anyof", [1, 4]], // Scheduled (1) or Quote (4)
-        ]);
+        ]) : [];
 
         let services = sharedFunctions.getServicesByFilters([
             ["custrecord_service_customer", "is", customerId],
@@ -240,7 +240,7 @@ const getOperations = {
             [
                 ["isinactive", "is", false],
                 "OR",
-                ["internalid", "anyof", serviceChanges.map(item => item.custrecord_servicechg_service)]
+                ["internalid", "anyof", serviceChanges.length ? serviceChanges.map(item => item.custrecord_servicechg_service) : '-1']
             ],
             "AND",
             ["custrecord_service_category", "is", 1], // Service Category: Services (1)
@@ -295,6 +295,25 @@ const postOperations = {
 
         _writeResponseJson(response, serviceRecord.save({ignoreMandatoryFields: true}));
     },
+    'cancelPendingService' : function(response, {serviceId, commRegId}) {
+        let {record} = NS_MODULES;
+        let serviceRecord = record.load({type: 'customrecord_service', id: serviceId});
+        let serviceChanges = sharedFunctions.getServiceChangesByFilters([
+            ["custrecord_servicechg_service", "is", serviceId],
+            "AND",
+            ["custrecord_servicechg_comm_reg", "is", commRegId],
+        ]);
+
+        if (serviceRecord.getValue({fieldId: 'isinactive'})) {
+            // service is inactive, means this is a new service pending creation, we can just delete the service and its service change
+            for (let serviceChange of serviceChanges)
+                record.delete({type: 'customrecord_servicechg', id: serviceChange.internalid});
+
+            record.delete({type: 'customrecord_service', id: serviceId});
+
+            _writeResponseJson(response, `Pending service ID ${serviceId} has been removed.`);
+        } else _writeResponseJson(response, `Pending service ID ${serviceId} was not removed because it is active.`);
+    },
     'cancelChangesOfService' : function(response, {serviceId, commRegId}) {
         let serviceChanges = sharedFunctions.getServiceChangesByFilters([
             ["custrecord_servicechg_service", "is", serviceId],
@@ -318,10 +337,8 @@ const postOperations = {
             record.create({type: 'customrecord_servicechg', isDynamic: true});
 
         // check if we need to temporarily set the service record to active
-        if (search['lookupFields']({type: 'customrecord_service', id: serviceChangeData['custrecord_servicechg_service'], columns: ['isinactive']})['isinactive']) {
-            needInactiveBypass = true;
-            record['submitFields']({type: 'customrecord_service', id: serviceChangeData['custrecord_servicechg_service'], values: {'isinactive': false}});
-        }
+        needInactiveBypass = search['lookupFields']({type: 'customrecord_service', id: serviceChangeData['custrecord_servicechg_service'], columns: ['isinactive']})['isinactive'];
+        record['submitFields']({type: 'customrecord_service', id: serviceChangeData['custrecord_servicechg_service'], values: {'isinactive': false}});
 
         delete serviceChangeFields.internalid;
 
@@ -403,7 +420,7 @@ const postOperations = {
         ]);
 
         serviceChanges.forEach(item => {
-            record['submitFields']({type: 'customrecord_servicechg', id: item.id, values: {'custrecord_servicechg_date_effective': dateEffective}});
+            record['submitFields']({type: 'customrecord_servicechg', id: item.internalid, values: {'custrecord_servicechg_date_effective': dateEffective}});
         });
 
         record['submitFields']({type: 'customrecord_commencement_register', id: commRegId, values: {'custrecord_comm_date': dateEffective}});
@@ -425,7 +442,7 @@ const postOperations = {
         ]);
 
         serviceChanges.forEach(item => {
-            record['submitFields']({type: 'customrecord_servicechg', id: item.id, values: {'custrecord_trial_end_date': trialEndDate}});
+            record['submitFields']({type: 'customrecord_servicechg', id: item.internalid, values: {'custrecord_trial_end_date': trialEndDate}});
         });
 
         record['submitFields']({type: 'customrecord_commencement_register', id: commRegId, values: {'custrecord_trial_expiry': trialEndDate}});

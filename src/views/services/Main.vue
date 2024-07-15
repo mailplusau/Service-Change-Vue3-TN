@@ -66,9 +66,9 @@ const dataLoading = computed(() => serviceStore.data.loading)
                         <DatePicker v-model="serviceStore.globalTrialEndDate" readonly title="Trial Expiry Date" :disabled="dataLoading"
                                     @date-changed="serviceStore.handleTrialEndDateChanged()">
                             <template v-slot:activator="{ activatorProps, displayDate, readonly }">
-                            <span v-bind="activatorProps" class="cursor-pointer text-secondary" title="Click to edit">{{ displayDate }}
-                                <v-icon size="x-small" class="mb-1">mdi-pencil</v-icon>
-                            </span>
+                                <span v-bind="activatorProps" class="cursor-pointer text-secondary" title="Click to edit">{{ displayDate }}
+                                    <v-icon size="x-small" class="mb-1">mdi-pencil</v-icon>
+                                </span>
                             </template>
                         </DatePicker>
                     </v-toolbar-title>
@@ -118,9 +118,11 @@ const dataLoading = computed(() => serviceStore.data.loading)
                     </template>
 
                     <template v-slot:[`item.actions`]="{ item }">
-                        <v-btn icon="mdi-pencil" size="x-small" variant="text" class="mx-1" color="primary"
+                        <v-btn icon="mdi-pencil" size="x-small" variant="text" class="ml-1" color="primary"
+                               v-if="!serviceStore.serviceMarkedForCancellation(item.internalid)"
                                @click="serviceStore.openServiceChangeDialog(item.internalid)"></v-btn>
-                        <v-btn icon="mdi-trash-can" size="x-small" variant="text" class="mx-1" color="red"
+                        <v-btn icon="mdi-trash-can" size="x-small" variant="text" class="ml-1" color="red"
+                               v-if="!serviceStore.serviceMarkedForCancellation(item.internalid)"
                                @click="serviceStore.serviceIdToCease = item.internalid"></v-btn>
                     </template>
 

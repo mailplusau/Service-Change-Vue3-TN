@@ -42,7 +42,11 @@ state.changeDialog.form = {...state.changeDialog.defaults};
 // state.changes.all = [...serviceChanges]
 
 const getters = {
+    serviceMarkedForCancellation : state => serviceId => {
+        let serviceChange = _findServiceChangeByServiceId(state, serviceId);
 
+        return !!serviceChange && serviceChange?.custrecord_servicechg_date_ceased
+    }
 };
 
 const actions = {
@@ -71,41 +75,7 @@ const actions = {
         this.data.loading = false;
     },
     openServiceChangeDialog(serviceId = null) {
-        this.changeDialog.form = {
-            ...this.changeDialog.defaults,
-            custrecord_servicechg_date_effective: this.globalEffectiveDate,
-            custrecord_trial_end_date: this.globalTrialEndDate || '',
-        };
-
-        if (serviceId) {
-            serviceId = parseInt(serviceId);
-
-            let service = _findServiceById(this, serviceId);
-            let serviceChange = _findServiceChangeByServiceId(this, serviceId);
-
-            if (service) {
-                if (serviceChange) for (let key in this.changeDialog.defaults) this.changeDialog.form[key] = serviceChange[key];
-                else {
-                    let freqArray = ['mon', 'tue', 'wed', 'thu', 'fri', 'adhoc']
-                        .map((item, index) => service['custrecord_service_day_' + item] ? (index + 1) : 0)
-                        .filter(item => item);
-
-                    this.changeDialog.form = {
-                        ...this.changeDialog.form, ...{
-                            custrecord_servicechg_service: service.internalid, // Associated service ID
-                            custrecord_default_servicechg_record: '1', // Default Service Change Record: Yes (1), No (2), Sometimes (3), Undecided (4)
-                            custrecord_servicechg_old_freq: freqArray.join(','),
-                            custrecord_servicechg_new_freq: freqArray.join(','),
-                        }
-                    };
-                }
-
-                this.changeDialog.form['isNewService'] = !!service['isinactive'];
-                this.changeDialog.form['serviceType'] = service['custrecord_service'];
-                this.changeDialog.form['serviceDescription'] = service['custrecord_service_description'];
-                this.changeDialog.form['custrecord_servicechg_date_effective'] = this.globalEffectiveDate;
-            }
-        }
+        _prepareServiceChangeForm(this, serviceId);
 
         this.changeDialog.open = true;
     },
@@ -132,55 +102,35 @@ const actions = {
     async saveServiceChange() {
         useGlobalDialog().displayBusy('Processing', 'Saving Service Change...');
 
-        let serviceChangeData = JSON.parse(JSON.stringify(this.changeDialog.form));
-        let isQuote = useMainStore().extraParams.sendEmail && !useMainStore().extraParams.closedWon;
-
-        if (!useCommRegStore().id) { // create a comm reg
-            await useCommRegStore().createNewCommReg(
-                useDataStore().serviceChangeTypes.filter(item => item.title === serviceChangeData['custrecord_servicechg_type'])[0].value,
-                isQuote ? COMM_REG_STATUS.Quote : COMM_REG_STATUS.Scheduled,
-                this.globalEffectiveDate, this.globalTrialEndDate);
-
-            serviceChangeData['custrecord_servicechg_comm_reg'] = useCommRegStore().id;
-        }
-
-        serviceChangeData['custrecord_servicechg_status'] = isQuote ? SERVICE_CHANGE_STATUS.Quote : SERVICE_CHANGE_STATUS.Scheduled;
-
-        // service change data has no associated service id or service is still inactive, we create/update the service
-        let service = _findServiceById(this, serviceChangeData['custrecord_servicechg_service']);
-        if (!serviceChangeData['custrecord_servicechg_service'] || service?.isinactive) {
-            let serviceData = {
-                isinactive: true,
-                custrecord_service: service?.custrecord_service || serviceChangeData['serviceType'],
-                name: service?.name || useDataStore().serviceTypes.filter(item => item.value === serviceChangeData['serviceType'])[0].title,
-                custrecord_service_customer: service?.custrecord_service_customer || useCustomerStore().id,
-                custrecord_service_comm_reg: service?.custrecord_service_comm_reg || useCommRegStore().id,
-
-                custrecord_service_price: serviceChangeData['custrecord_servicechg_new_price'],
-                custrecord_service_description: serviceChangeData['serviceDescription'],
-
-            };
-
-            ['mon', 'tue', 'wed', 'thu', 'fri', 'adhoc'].forEach((item, index) => {
-                serviceData['custrecord_service_day_' + item] = serviceChangeData.custrecord_servicechg_new_freq.split(',').includes((index + 1) + '');
-            });
-
-            serviceChangeData['custrecord_servicechg_service'] = await http.post('saveService', {
-                serviceId: service?.internalid, serviceData
-            });
-        }
-
-        await http.post('saveServiceChange', {serviceChangeData});
-
-        await http.post('updateServiceRatesOfCustomer', {customerId: useCustomerStore().id, commRegId: useCommRegStore().id});
+        await _saveServiceChange(this);
 
         await _fetchAllData(this);
 
         this.changeDialog.open = false;
+        
         useGlobalDialog().close();
     },
     async cancelService() {
-        console.log('cancelling service', this.serviceIdToCease);
+        let serviceId = parseInt(this.serviceIdToCease);
+        let service = _findServiceById(this, serviceId);
+
+        if (!service) return;
+
+        useGlobalDialog().displayBusy('Processing', service.isinactive ? `Cancelling the creation of Service [${service.custrecord_service_text}]` : `Marking Service [${service.custrecord_service_text}] for Cancellation.`);
+        
+        if (service.isinactive) await http.post('cancelPendingService', {serviceId, commRegId: useCommRegStore().id})
+        else {
+            _prepareServiceChangeForm(this, serviceId);
+
+            this.changeDialog.form['custrecord_servicechg_date_ceased'] = this.globalEffectiveDate;
+
+            await _saveServiceChange(this);
+        }
+
+        await _fetchAllData(this);
+
+        useGlobalDialog().close();
+
         this.serviceIdToCease = null;
     },
     async cancelChangesOfService(serviceId) {
@@ -188,7 +138,7 @@ const actions = {
 
         if (!service) return;
 
-        useGlobalDialog().displayBusy('Processing', `Removing all pending changes of Service [${service.custrecord_service_text}]`);
+        useGlobalDialog().displayBusy('Processing', `Removing all pending changes of Service [${service.custrecord_service_text}]. Please wait...`);
 
         await http.post('cancelChangesOfService', {serviceId, commRegId: useCommRegStore().id});
 
@@ -199,6 +149,8 @@ const actions = {
 };
 
 async function _fetchAllData(ctx) {
+    if (!useCustomerStore().id) return;
+
     let {services, serviceChanges} = await http.get('getServicesAndServiceChanges', {
         customerId: useCustomerStore().id, commRegId: useCommRegStore().id
     });
@@ -221,10 +173,94 @@ function _findServiceChangeByServiceId(ctx, serviceId) {
 }
 
 function _parseIsoDatetime(dateString, dateOnly = false) {
+    console.log('dateString', dateString);
     let tmp = dateString.split(/[: T-]/).map(parseFloat);
     return dateOnly ?
         new Date(tmp[0], tmp[1] - 1, tmp[2], (new Date().getTimezoneOffset()/-60) + 1, 0, 0, 0) :
         new Date(tmp[0], tmp[1] - 1, tmp[2], tmp[3] || 0, tmp[4] || 0, tmp[5] || 0, 0);
+}
+
+async function _saveServiceChange(ctx) {
+    let serviceChangeData = JSON.parse(JSON.stringify(ctx.changeDialog.form));
+    let isQuote = useMainStore().extraParams.sendEmail && !useMainStore().extraParams.closedWon;
+
+    if (!useCommRegStore().id) { // create a comm reg
+        await useCommRegStore().createNewCommReg(
+            useDataStore().serviceChangeTypes.filter(item => item.title === serviceChangeData['custrecord_servicechg_type'])[0].value,
+            isQuote ? COMM_REG_STATUS.Quote : COMM_REG_STATUS.Scheduled,
+            ctx.globalEffectiveDate, ctx.globalTrialEndDate);
+
+        serviceChangeData['custrecord_servicechg_comm_reg'] = useCommRegStore().id;
+    }
+
+    serviceChangeData['custrecord_servicechg_status'] = isQuote ? SERVICE_CHANGE_STATUS.Quote : SERVICE_CHANGE_STATUS.Scheduled;
+
+    // service change data has no associated service id or service is still inactive, we create/update the service
+    let service = _findServiceById(ctx, serviceChangeData['custrecord_servicechg_service']);
+    if (!serviceChangeData['custrecord_servicechg_service'] || service?.isinactive) {
+        let serviceData = {
+            isinactive: true,
+            custrecord_service: service?.custrecord_service || serviceChangeData['serviceType'],
+            name: service?.name || useDataStore().serviceTypes.filter(item => item.value === serviceChangeData['serviceType'])[0].title,
+            custrecord_service_customer: service?.custrecord_service_customer || useCustomerStore().id,
+            custrecord_service_comm_reg: service?.custrecord_service_comm_reg || useCommRegStore().id,
+
+            custrecord_service_price: serviceChangeData['custrecord_servicechg_new_price'],
+            custrecord_service_description: serviceChangeData['serviceDescription'],
+
+        };
+
+        ['mon', 'tue', 'wed', 'thu', 'fri', 'adhoc'].forEach((item, index) => {
+            serviceData['custrecord_service_day_' + item] = serviceChangeData.custrecord_servicechg_new_freq.split(',').includes((index + 1) + '');
+        });
+
+        serviceChangeData['custrecord_servicechg_service'] = await http.post('saveService', {
+            serviceId: service?.internalid, serviceData
+        });
+    }
+
+    await http.post('saveServiceChange', {serviceChangeData});
+
+    await http.post('updateServiceRatesOfCustomer', {customerId: useCustomerStore().id, commRegId: useCommRegStore().id});
+}
+
+function _prepareServiceChangeForm(ctx, serviceId = null) {
+    ctx.changeDialog.form = {
+        ...ctx.changeDialog.defaults,
+        custrecord_servicechg_date_effective: ctx.globalEffectiveDate,
+        custrecord_trial_end_date: ctx.globalTrialEndDate || '',
+    };
+
+    if (serviceId) {
+        serviceId = parseInt(serviceId);
+
+        let service = _findServiceById(ctx, serviceId);
+        let serviceChange = _findServiceChangeByServiceId(ctx, serviceId);
+
+        if (service) {
+            if (serviceChange) for (let key in ctx.changeDialog.defaults) ctx.changeDialog.form[key] = serviceChange[key];
+            else {
+                let freqArray = ['mon', 'tue', 'wed', 'thu', 'fri', 'adhoc']
+                    .map((item, index) => service['custrecord_service_day_' + item] ? (index + 1) : 0)
+                    .filter(item => item);
+
+                ctx.changeDialog.form = {
+                    ...ctx.changeDialog.form, ...{
+                        custrecord_servicechg_service: service.internalid, // Associated service ID
+                        custrecord_default_servicechg_record: '1', // Default Service Change Record: Yes (1), No (2), Sometimes (3), Undecided (4)
+                        custrecord_servicechg_old_price: service.custrecord_service_price,
+                        custrecord_servicechg_old_freq: freqArray.join(','),
+                        custrecord_servicechg_new_freq: freqArray.join(','),
+                    }
+                };
+            }
+
+            ctx.changeDialog.form['isNewService'] = !!service['isinactive'];
+            ctx.changeDialog.form['serviceType'] = service['custrecord_service'];
+            ctx.changeDialog.form['serviceDescription'] = service['custrecord_service_description'];
+            ctx.changeDialog.form['custrecord_servicechg_date_effective'] = ctx.globalEffectiveDate;
+        }
+    }
 }
 
 export const useServiceStore = defineStore('services', {

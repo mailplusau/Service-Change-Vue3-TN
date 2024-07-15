@@ -7,15 +7,15 @@ const state = {
 };
 
 const getters = {
-
+    isAdmin : state => [3, 1032].includes(state.role)
 };
 
 const actions = {
     async init() { // getCurrentUserDetails
         let {id, role} = await http.get('getCurrentUserDetails');
 
-        this.id = id;
-        this.role = role;
+        this.id = parseInt(id);
+        this.role = parseInt(role);
     }
 };
 

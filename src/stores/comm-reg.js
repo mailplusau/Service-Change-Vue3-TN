@@ -44,6 +44,7 @@ const actions = {
 async function _getCommencementRegister(ctx) {
     let fieldIds = [];
     for (let fieldId in ctx.details) fieldIds.push(fieldId);
+    fieldIds = fieldIds.map(fieldId => (fieldId === 'internalid' && !!ctx.id) ? 'id' : fieldId)
 
     let data = !!ctx.id ?
         await http.get('getCommencementRegister', { commRegId: ctx.id, fieldIds }) :
