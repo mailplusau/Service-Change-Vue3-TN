@@ -4,9 +4,11 @@ import { rules, allowOnlyNumericalInput, formatPrice } from "@/utils/utils.mjs";
 import DatePicker from '@/components/shared/DatePicker.vue';
 import {computed, ref} from 'vue';
 import {useDataStore} from '@/stores/data';
+import {useUserStore} from '@/stores/user';
 
 const serviceStore = useServiceStore();
 const dataStore = useDataStore();
+const userStore = useUserStore();
 const { validate } = rules;
 const formValid = ref(true);
 const serviceChangeForm = ref(null);
@@ -19,8 +21,10 @@ const dialogTitle = computed(() => {
     return `Changing Service ${index >= 0 ? serviceStore.data.all[index]['custrecord_service_text'] : '[unknown]'}`;
 });
 
-const serviceChangeTypes = computed(() => dataStore.serviceChangeTypes.map(item => ({value: item.title, title: item.title})));
 const serviceTypes = computed(() => dataStore.serviceTypes.filter(item => serviceStore.serviceTypesInUse.indexOf(item.value) < 0))
+const serviceChangeTypes = computed(() => dataStore.serviceChangeTypes
+    .filter(item => userStore.isAdmin || ['extra service', 'change of frequency', 'change of price', 'change of service'].includes(item.title.trim().toLowerCase()))
+    .map(item => ({value: item.title, title: item.title})));
 
 function getFreqByTerm(term) {
     let terms = ['mon', 'tue', 'wed', 'thu', 'fri', 'adhoc'];

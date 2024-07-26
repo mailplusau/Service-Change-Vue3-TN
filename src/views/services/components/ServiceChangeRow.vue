@@ -72,7 +72,7 @@ function cancelServiceChange() {
         <td class="pl-7" :colspan="columns.length">
             <v-icon class="mr-2">mdi-subdirectory-arrow-right</v-icon>
             <v-chip label color="green-darken-4" size="x-small">
-                New Service
+                Extra Service
             </v-chip>
         </td>
     </tr>

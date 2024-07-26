@@ -227,6 +227,7 @@ async function _saveServiceChange(ctx) {
 function _prepareServiceChangeForm(ctx, serviceId = null) {
     ctx.changeDialog.form = {
         ...ctx.changeDialog.defaults,
+        custrecord_servicechg_type: 'Extra Service',
         custrecord_servicechg_date_effective: ctx.globalEffectiveDate,
         custrecord_trial_end_date: ctx.globalTrialEndDate || '',
     };
@@ -246,8 +247,9 @@ function _prepareServiceChangeForm(ctx, serviceId = null) {
 
                 ctx.changeDialog.form = {
                     ...ctx.changeDialog.form, ...{
+                        custrecord_servicechg_type: '',
                         custrecord_servicechg_service: service.internalid, // Associated service ID
-                        custrecord_default_servicechg_record: '1', // Default Service Change Record: Yes (1), No (2), Sometimes (3), Undecided (4)
+                        custrecord_default_servicechg_record: !!service['isinactive'] ? '1' : '', // Default Service Change Record: Yes (1), No (2), Sometimes (3), Undecided (4)
                         custrecord_servicechg_old_price: service.custrecord_service_price,
                         custrecord_servicechg_old_freq: freqArray.join(','),
                         custrecord_servicechg_new_freq: freqArray.join(','),
