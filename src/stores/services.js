@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import http from '@/utils/http.mjs';
 import {useCustomerStore} from '@/stores/customer';
 import {useCommRegStore} from '@/stores/comm-reg';
-import {COMM_REG_STATUS, SERVICE_CHANGE_STATUS, serviceChangeDefaults} from '@/utils/utils.mjs';
+import {COMM_REG_STATUS, offsetDateObjectForNSDateField, SERVICE_CHANGE_STATUS, serviceChangeDefaults} from '@/utils/utils.mjs';
 import {useUserStore} from '@/stores/user';
 import {useMainStore} from '@/stores/main';
 import {useDataStore} from '@/stores/data';
@@ -22,7 +22,6 @@ const state = {
         defaults: {
             ...serviceChangeDefaults,
 
-            isNewService: true,
             serviceType: null,
             serviceDescription: ''
         },
@@ -82,7 +81,7 @@ const actions = {
     async handleEffectiveDateChanged() {
         useGlobalDialog().displayBusy('Processing', 'Applying new effective date. Please wait...');
 
-        await http.post('updateEffectiveDate', {commRegId: useCommRegStore().id, dateEffective: this.globalEffectiveDate});
+        await http.post('updateEffectiveDate', {commRegId: useCommRegStore().id, dateEffective: offsetDateObjectForNSDateField(this.globalEffectiveDate)});
         useCommRegStore().details.custrecord_comm_date = this.globalEffectiveDate.toISOString();
         useCommRegStore().texts.custrecord_comm_date = this.globalEffectiveDate.toLocaleDateString();
         for (let serviceChange of this.changes.all) serviceChange['custrecord_servicechg_date_effective'] = this.globalEffectiveDate.toLocaleDateString();
@@ -92,7 +91,7 @@ const actions = {
     async handleTrialEndDateChanged() {
         useGlobalDialog().displayBusy('Processing', 'Applying new trial expiry date. Please wait...');
 
-        await http.post('updateTrialEndDate', {commRegId: useCommRegStore().id, trialEndDate: this.globalTrialEndDate});
+        await http.post('updateTrialEndDate', {commRegId: useCommRegStore().id, trialEndDate: offsetDateObjectForNSDateField(this.globalTrialEndDate)});
         useCommRegStore().details.custrecord_trial_expiry = this.globalTrialEndDate.toISOString();
         useCommRegStore().texts.custrecord_trial_expiry = this.globalTrialEndDate.toLocaleDateString();
         for (let serviceChange of this.changes.all) serviceChange['custrecord_trial_end_date'] = this.globalEffectiveDate.toLocaleDateString();
@@ -188,7 +187,7 @@ async function _saveServiceChange(ctx) {
         await useCommRegStore().createNewCommReg(
             useDataStore().serviceChangeTypes.filter(item => item.title === serviceChangeData['custrecord_servicechg_type'])[0].value,
             isQuote ? COMM_REG_STATUS.Quote : COMM_REG_STATUS.Scheduled,
-            ctx.globalEffectiveDate, ctx.globalTrialEndDate);
+            offsetDateObjectForNSDateField(ctx.globalEffectiveDate), offsetDateObjectForNSDateField(ctx.globalTrialEndDate));
 
         serviceChangeData['custrecord_servicechg_comm_reg'] = useCommRegStore().id;
     }
@@ -207,7 +206,6 @@ async function _saveServiceChange(ctx) {
 
             custrecord_service_price: serviceChangeData['custrecord_servicechg_new_price'],
             custrecord_service_description: serviceChangeData['serviceDescription'],
-
         };
 
         ['mon', 'tue', 'wed', 'thu', 'fri', 'adhoc'].forEach((item, index) => {
@@ -217,6 +215,10 @@ async function _saveServiceChange(ctx) {
         serviceChangeData['custrecord_servicechg_service'] = await http.post('saveService', {
             serviceId: service?.internalid, serviceData
         });
+
+        serviceChangeData['custrecord_servicechg_date_effective'] = offsetDateObjectForNSDateField(ctx.changeDialog.form['custrecord_servicechg_date_effective'])
+        serviceChangeData['custrecord_servicechg_date_ceased'] = offsetDateObjectForNSDateField(ctx.changeDialog.form['custrecord_servicechg_date_ceased'])
+        serviceChangeData['custrecord_trial_end_date'] = offsetDateObjectForNSDateField(ctx.changeDialog.form['custrecord_trial_end_date'])
     }
 
     await http.post('saveServiceChange', {serviceChangeData});
@@ -249,7 +251,7 @@ function _prepareServiceChangeForm(ctx, serviceId = null) {
                     ...ctx.changeDialog.form, ...{
                         custrecord_servicechg_type: '',
                         custrecord_servicechg_service: service.internalid, // Associated service ID
-                        custrecord_default_servicechg_record: !!service['isinactive'] ? '1' : '', // Default Service Change Record: Yes (1), No (2), Sometimes (3), Undecided (4)
+                        custrecord_default_servicechg_record: '', // existing service but no service change found, meaning it was created previously in the past, so this service change record is not a default one, we leave it empty
                         custrecord_servicechg_old_price: service.custrecord_service_price,
                         custrecord_servicechg_old_freq: freqArray.join(','),
                         custrecord_servicechg_new_freq: freqArray.join(','),
@@ -257,7 +259,6 @@ function _prepareServiceChangeForm(ctx, serviceId = null) {
                 };
             }
 
-            ctx.changeDialog.form['isNewService'] = !!service['isinactive'];
             ctx.changeDialog.form['serviceType'] = service['custrecord_service'];
             ctx.changeDialog.form['serviceDescription'] = service['custrecord_service_description'];
             ctx.changeDialog.form['custrecord_servicechg_date_effective'] = ctx.globalEffectiveDate;

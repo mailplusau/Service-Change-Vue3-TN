@@ -187,6 +187,12 @@ export function allowOnlyNumericalInput(evt) {
     else return true;
 }
 
+export function offsetDateObjectForNSDateField(dateObject) {
+    if (Object.prototype.toString.call(dateObject) !== '[object Date]') return dateObject;
+
+    return dateObject.getFullYear() + '-' + `${dateObject.getMonth() + 1}`.padStart(2, '0') + '-' + `${dateObject.getDate()}`.padStart(2, '0') + 'T00:00:00.000';
+}
+
 export function formatPrice(price) {
     return AUDollar.format(price);
 }

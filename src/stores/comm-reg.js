@@ -1,5 +1,5 @@
 import {defineStore} from 'pinia';
-import {commRegDefaults} from '@/utils/utils.mjs';
+import {commRegDefaults, offsetDateObjectForNSDateField} from '@/utils/utils.mjs';
 import http from '@/utils/http.mjs';
 import {useSalesRecordStore} from '@/stores/sales-record';
 import {useCustomerStore} from '@/stores/customer';
@@ -33,7 +33,8 @@ const actions = {
             saleTypeId,
             commRegStatus,
             commencementDate,
-            trialEndDate
+            trialEndDate,
+            signupDate: offsetDateObjectForNSDateField(new Date()),
         });
 
         await _getCommencementRegister(this);

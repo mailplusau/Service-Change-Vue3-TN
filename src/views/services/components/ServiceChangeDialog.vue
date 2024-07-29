@@ -23,7 +23,7 @@ const dialogTitle = computed(() => {
 
 const serviceTypes = computed(() => dataStore.serviceTypes.filter(item => serviceStore.serviceTypesInUse.indexOf(item.value) < 0))
 const serviceChangeTypes = computed(() => dataStore.serviceChangeTypes
-    .filter(item => userStore.isAdmin || ['extra service', 'change of frequency', 'change of price', 'change of service'].includes(item.title.trim().toLowerCase()))
+    .filter(item => userStore.isAdmin || ['extra service', 'change of frequency', 'change of price', 'change of service', 're-sign', 'save'].includes(item.title.trim().toLowerCase()))
     .map(item => ({value: item.title, title: item.title})));
 
 function getFreqByTerm(term) {

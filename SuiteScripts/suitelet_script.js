@@ -13,7 +13,7 @@ let htmlTemplateFilename/**/;
 let clientScriptFilename/**/;
 
 const defaultTitle = VARS.pageTitle;
-const isoStringRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/;
+const isoStringRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}$/; // ISO string without the timezone indicator (Z)
 
 let NS_MODULES = {};
 
@@ -348,7 +348,7 @@ const postOperations = {
             else
                 serviceChangeRecord.setValue({
                     fieldId: key,
-                    value: isoStringRegex.test(serviceChangeData[key]) ? new Date(serviceChangeData[key].replace(/[Z,z]/gi, '')) : serviceChangeData[key]
+                    value: isoStringRegex.test(serviceChangeData[key]) ? new Date(serviceChangeData[key]) : serviceChangeData[key]
                 });
 
         let serviceChangeId = serviceChangeRecord.save({ignoreMandatoryFields: true})
@@ -358,7 +358,7 @@ const postOperations = {
 
         _writeResponseJson(response, serviceChangeId);
     },
-    'createCommencementRegister' : function(response, {customerId, salesRecordId, saleTypeId, commRegStatus, commencementDate, trialEndDate}) {
+    'createCommencementRegister' : function(response, {customerId, salesRecordId, saleTypeId, commRegStatus, commencementDate, trialEndDate, signupDate}) {
         let {record, runtime} = NS_MODULES;
         let userId = runtime['getCurrentUser']().id;
         let userRole = runtime['getCurrentUser']().role;
@@ -369,9 +369,9 @@ const postOperations = {
 
         let commRegRecord = record.create({type: 'customrecord_commencement_register'});
 
-        commRegRecord.setValue({fieldId: 'custrecord_date_entry', value: new Date()});
-        commRegRecord.setValue({fieldId: 'custrecord_comm_date', value: new Date(commencementDate.replace(/[Z,z]/gi, ''))});
-        commRegRecord.setValue({fieldId: 'custrecord_comm_date_signup', value: new Date()});
+        commRegRecord.setValue({fieldId: 'custrecord_date_entry', value: new Date(signupDate)});
+        commRegRecord.setValue({fieldId: 'custrecord_comm_date', value: new Date(commencementDate)});
+        commRegRecord.setValue({fieldId: 'custrecord_comm_date_signup', value: new Date(signupDate)});
         commRegRecord.setValue({fieldId: 'custrecord_customer', value: customerId});
         commRegRecord.setValue({fieldId: 'custrecord_salesrep', value: userId});
         commRegRecord.setValue({fieldId: 'custrecord_std_equiv', value: 1}); // Standard Equivalent
@@ -382,7 +382,7 @@ const postOperations = {
         commRegRecord.setValue({fieldId: 'custrecord_sale_type', value: saleTypeId});
 
         if (trialEndDate && isoStringRegex.test(trialEndDate))
-            commRegRecord.setValue({fieldId: 'custrecord_trial_expiry', value: new Date(trialEndDate.replace(/[Z,z]/gi, ''))});
+            commRegRecord.setValue({fieldId: 'custrecord_trial_expiry', value: new Date(trialEndDate)});
 
         if (userRole !== 1000) commRegRecord.setValue({fieldId: 'custrecord_franchisee', value: partnerId});
         if (salesRecordId) commRegRecord.setValue({fieldId: 'custrecord_commreg_sales_record', value: salesRecordId});
@@ -409,7 +409,7 @@ const postOperations = {
         if (!isoStringRegex.test(dateEffective)) throw `Effective date [${dateEffective}] is not a valid date`;
         if (!commRegId) throw `Commencement Register ID not specified`;
 
-        dateEffective = new Date(dateEffective.replace(/[Z,z]/gi, ''));
+        dateEffective = new Date(dateEffective);
         let {record} = NS_MODULES;
         let serviceChanges = sharedFunctions.getServiceChangesByFilters([
             ["custrecord_servicechg_comm_reg", "is", commRegId],
@@ -431,7 +431,7 @@ const postOperations = {
         if (!isoStringRegex.test(trialEndDate)) throw `Effective date [${trialEndDate}] is not a valid date`;
         if (!commRegId) throw `Commencement Register ID not specified`;
 
-        trialEndDate = new Date(trialEndDate.replace(/[Z,z]/gi, ''));
+        trialEndDate = new Date(trialEndDate);
         let {record} = NS_MODULES;
         let serviceChanges = sharedFunctions.getServiceChangesByFilters([
             ["custrecord_servicechg_comm_reg", "is", commRegId],
