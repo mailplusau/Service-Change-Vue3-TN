@@ -252,7 +252,7 @@ async function injectImportStatements(fileContent) {
 
         if ($import.importClause.default)
             fileContent = replaceBetween(fileContent, $import.startIndex, $import.endIndex,
-                `const ${$import.importClause.default} = ${JSON.stringify(moduleContents[$import.importClause.default])}`);
+                `const ${$import.importClause.default} = ${JSON.stringify(moduleContents[$import.importClause.default])};\r\n`);
         else if ($import.importClause.named.length) {
             let originalImport = fileContent.substring($import.startIndex, $import.endIndex);
             let replacement = `\r\n// ${originalImport}\r\n`;
@@ -292,16 +292,24 @@ function replaceBetween(original, start, end, what) {
 }
 
 function resolveFilename(filePath, fileContent) {
-    let suiteletFilename = packageJson.netsuite['suiteletFilename']
-        || `mp_sl_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.js`;
-    let clientFilename = packageJson.netsuite['clientFilename']
-        || `mp_cl_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.js`;
+    const nameTransformationTable = {
+        "suitelet_script.js": packageJson.netsuite['suiteletFilename']
+            || `mp_sl_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.js`,
+        "client_script.js": packageJson.netsuite['clientFilename']
+            || `mp_cl_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.js`,
+        "scheduled_script": packageJson.netsuite['scheduledScriptName']
+            || `mp_sc_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.js`,
+        "mare_script": packageJson.netsuite['mapReduceScriptName']
+            || `mp_mr_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.js`,
+    };
 
-    filePath = filePath.replace('suitelet_script.js', suiteletFilename);
-    filePath = filePath.replace('client_script.js', clientFilename);
+    const variableTransformationTable = {
+        "let htmlTemplateFilename/**/;": `let htmlTemplateFilename = '${getHtmlFilename()}';`,
+        "let clientScriptFilename/**/;": `let clientScriptFilename = '${nameTransformationTable['client_script.js']}';`
+    };
 
-    fileContent = fileContent.replace('let htmlTemplateFilename/**/;', `let htmlTemplateFilename = '${getHtmlFilename()}';`);
-    fileContent = fileContent.replace('let clientScriptFilename/**/;', `let clientScriptFilename = '${clientFilename}';`);
+    for (let filename in nameTransformationTable) filePath = filePath.replace(filename, nameTransformationTable[filename]);
+    for (let variable in variableTransformationTable) fileContent = fileContent.replace(variable, variableTransformationTable[variable]);
 
     return {filePath, fileContent};
 }
