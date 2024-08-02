@@ -23,8 +23,8 @@ const actions = {
 
         this.loading = false;
     },
-    async createNewCommReg(saleTypeId, commRegStatus, commencementDate, trialEndDate) {
-        if (this.id) return;
+    async createNewCommReg(saleTypeId, commRegStatus, commencementDate, trialEndDate, billingStartDate) {
+        if (this.id || !useCustomerStore().id || !useSalesRecordStore().id) return;
         this.loading = true;
 
         this.id = await http.post('createCommencementRegister', {
@@ -34,6 +34,7 @@ const actions = {
             commRegStatus,
             commencementDate,
             trialEndDate,
+            billingStartDate,
             signupDate: offsetDateObjectForNSDateField(new Date()),
         });
 
@@ -43,6 +44,8 @@ const actions = {
 };
 
 async function _getCommencementRegister(ctx) {
+    if (!useCustomerStore().id || !useSalesRecordStore().id) return;
+
     let fieldIds = [];
     for (let fieldId in ctx.details) fieldIds.push(fieldId);
     fieldIds = fieldIds.map(fieldId => (fieldId === 'internalid' && !!ctx.id) ? 'id' : fieldId)

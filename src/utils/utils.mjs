@@ -19,7 +19,8 @@ export const COMM_REG_STATUS = {
     Quote: 10,
     Scheduled: 9,
     Signed: 2,
-    Trial_Complete: 8
+    Trial_Complete: 8,
+    Waiting_TNC: 11,
 };
 
 export const SERVICE_CHANGE_STATUS = {
@@ -42,13 +43,14 @@ export const commRegDefaults = {
     custrecord_customer: null,
     custrecord_salesrep: null,
     custrecord_franchisee: null,
-    custrecord_trial_status: '',
+    custrecord_trial_status: '11',
     custrecord_commreg_sales_record: null,
     custrecord_wkly_svcs: '5',
     custrecord_state: '',
     custrecord_finalised_by: '',
     custrecord_finalised_on: '',
-    custrecord_trial_expiry: ''
+    custrecord_trial_expiry: '',
+    custrecord_bill_date: '',
 };
 
 export const customerDefaults = {
@@ -199,11 +201,6 @@ export function formatPrice(price) {
 
 export function formatDate(date) {
     return dateFormat.format(date)
-}
-
-export function goToCustomerRecord(customerId) {
-    if (!customerId) return;
-    window.open(`${baseUrl}/app/common/entity/custjob.nl?id=${customerId}`, '_blank').focus();
 }
 
 export function debounce(fn, wait){

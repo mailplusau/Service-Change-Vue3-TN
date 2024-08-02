@@ -9,7 +9,6 @@ import {useSalesRecordStore} from '@/stores/sales-record';
 import {useServiceStore} from '@/stores/services';
 import {useDataStore} from '@/stores/data';
 
-// const baseUrl = 'https://' + import.meta.env.VITE_NS_REALM + '.app.netsuite.com';
 getWindowContext().document.title = `${VARS.pageTitle} - NetSuite Australia (Mail Plus Pty Ltd)`
 
 const state = {

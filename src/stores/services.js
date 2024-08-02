@@ -7,7 +7,9 @@ import {useUserStore} from '@/stores/user';
 import {useMainStore} from '@/stores/main';
 import {useDataStore} from '@/stores/data';
 import {useGlobalDialog} from '@/stores/global-dialog';
-import {serviceChanges, services} from '@/utils/testData';
+
+const dateFields = ['custrecord_servicechg_date_effective', 'custrecord_servicechg_date_ceased', 'custrecord_trial_end_date'];
+let isoStringRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/;
 
 const state = {
     data: {
@@ -55,9 +57,9 @@ const actions = {
         await _fetchAllData(this);
 
         if (useCommRegStore().id) {
-            this.globalEffectiveDate = _parseIsoDatetime(useCommRegStore().details.custrecord_comm_date, true);
+            this.globalEffectiveDate = new Date(useCommRegStore().details.custrecord_comm_date);
             this.globalTrialEndDate = useCommRegStore().details.custrecord_trial_expiry ?
-                _parseIsoDatetime(useCommRegStore().details.custrecord_trial_expiry, true) : null;
+                new Date(useCommRegStore().details.custrecord_trial_expiry) : null;
         } else if (useMainStore().extraParams.freeTrial)
             this.globalTrialEndDate = new Date((new Date(this.globalEffectiveDate.toISOString())).setDate(this.globalEffectiveDate.getDate() + 8));
 
@@ -69,7 +71,7 @@ const actions = {
         this.changeDialog.defaults.custrecord_servicechg_date_effective = this.globalEffectiveDate;
         this.changeDialog.defaults.custrecord_servicechg_created = useUserStore().id;
         this.changeDialog.defaults.custrecord_trial_end_date = this.globalTrialEndDate || '';
-        this.changeDialog.defaults.custrecord_default_servicechg_record = '1'; // always make this the default service change cuz there will only be 1
+        this.changeDialog.defaults.custrecord_default_servicechg_record = '1'; // 1 signifies that this service is new and this is its first service change record
 
         this.data.loading = false;
     },
@@ -79,6 +81,8 @@ const actions = {
         this.changeDialog.open = true;
     },
     async handleEffectiveDateChanged() {
+        if (!useCommRegStore().id) return;
+
         useGlobalDialog().displayBusy('Processing', 'Applying new effective date. Please wait...');
 
         await http.post('updateEffectiveDate', {commRegId: useCommRegStore().id, dateEffective: offsetDateObjectForNSDateField(this.globalEffectiveDate)});
@@ -89,9 +93,16 @@ const actions = {
         useGlobalDialog().close();
     },
     async handleTrialEndDateChanged() {
+        if (!useCommRegStore().id) return;
+
         useGlobalDialog().displayBusy('Processing', 'Applying new trial expiry date. Please wait...');
 
-        await http.post('updateTrialEndDate', {commRegId: useCommRegStore().id, trialEndDate: offsetDateObjectForNSDateField(this.globalTrialEndDate)});
+        await http.post('updateTrialEndDate', {
+            commRegId: useCommRegStore().id,
+            trialEndDate: offsetDateObjectForNSDateField(this.globalTrialEndDate),
+            billingStartDate: offsetDateObjectForNSDateField(_getBillingDateFromTrialExpiry(this.globalTrialEndDate))
+        });
+
         useCommRegStore().details.custrecord_trial_expiry = this.globalTrialEndDate.toISOString();
         useCommRegStore().texts.custrecord_trial_expiry = this.globalTrialEndDate.toLocaleDateString();
         for (let serviceChange of this.changes.all) serviceChange['custrecord_trial_end_date'] = this.globalEffectiveDate.toLocaleDateString();
@@ -171,28 +182,22 @@ function _findServiceChangeByServiceId(ctx, serviceId) {
     return index >= 0 ? ctx.changes.all[index] : null;
 }
 
-function _parseIsoDatetime(dateString, dateOnly = false) {
-    console.log('dateString', dateString);
-    let tmp = dateString.split(/[: T-]/).map(parseFloat);
-    return dateOnly ?
-        new Date(tmp[0], tmp[1] - 1, tmp[2], (new Date().getTimezoneOffset()/-60) + 1, 0, 0, 0) :
-        new Date(tmp[0], tmp[1] - 1, tmp[2], tmp[3] || 0, tmp[4] || 0, tmp[5] || 0, 0);
-}
-
 async function _saveServiceChange(ctx) {
     let serviceChangeData = JSON.parse(JSON.stringify(ctx.changeDialog.form));
-    let isQuote = useMainStore().extraParams.sendEmail && !useMainStore().extraParams.closedWon;
+    let isQuote = (!useMainStore().extraParams.closedWon && !useMainStore().extraParams.freeTrial);
 
     if (!useCommRegStore().id) { // create a comm reg
         await useCommRegStore().createNewCommReg(
             useDataStore().serviceChangeTypes.filter(item => item.title === serviceChangeData['custrecord_servicechg_type'])[0].value,
-            isQuote ? COMM_REG_STATUS.Quote : COMM_REG_STATUS.Scheduled,
-            offsetDateObjectForNSDateField(ctx.globalEffectiveDate), offsetDateObjectForNSDateField(ctx.globalTrialEndDate));
+            isQuote ? COMM_REG_STATUS.Quote : COMM_REG_STATUS.Waiting_TNC,
+            offsetDateObjectForNSDateField(ctx.globalEffectiveDate), offsetDateObjectForNSDateField(ctx.globalTrialEndDate),
+            _getBillingDateFromTrialExpiry(ctx.globalTrialEndDate) || '');
 
         serviceChangeData['custrecord_servicechg_comm_reg'] = useCommRegStore().id;
     }
 
     serviceChangeData['custrecord_servicechg_status'] = isQuote ? SERVICE_CHANGE_STATUS.Quote : SERVICE_CHANGE_STATUS.Scheduled;
+    for (let fieldId of dateFields) serviceChangeData[fieldId] = offsetDateObjectForNSDateField(ctx.changeDialog.form[fieldId]);
 
     // service change data has no associated service id or service is still inactive, we create/update the service
     let service = _findServiceById(ctx, serviceChangeData['custrecord_servicechg_service']);
@@ -215,10 +220,6 @@ async function _saveServiceChange(ctx) {
         serviceChangeData['custrecord_servicechg_service'] = await http.post('saveService', {
             serviceId: service?.internalid, serviceData
         });
-
-        serviceChangeData['custrecord_servicechg_date_effective'] = offsetDateObjectForNSDateField(ctx.changeDialog.form['custrecord_servicechg_date_effective'])
-        serviceChangeData['custrecord_servicechg_date_ceased'] = offsetDateObjectForNSDateField(ctx.changeDialog.form['custrecord_servicechg_date_ceased'])
-        serviceChangeData['custrecord_trial_end_date'] = offsetDateObjectForNSDateField(ctx.changeDialog.form['custrecord_trial_end_date'])
     }
 
     await http.post('saveServiceChange', {serviceChangeData});
@@ -241,7 +242,7 @@ function _prepareServiceChangeForm(ctx, serviceId = null) {
         let serviceChange = _findServiceChangeByServiceId(ctx, serviceId);
 
         if (service) {
-            if (serviceChange) for (let key in ctx.changeDialog.defaults) ctx.changeDialog.form[key] = serviceChange[key];
+            if (serviceChange) for (let key in ctx.changeDialog.defaults) ctx.changeDialog.form[key] = isoStringRegex.test(serviceChange[key]) ? new Date(serviceChange[key]) : serviceChange[key];
             else {
                 let freqArray = ['mon', 'tue', 'wed', 'thu', 'fri', 'adhoc']
                     .map((item, index) => service['custrecord_service_day_' + item] ? (index + 1) : 0)
@@ -261,9 +262,20 @@ function _prepareServiceChangeForm(ctx, serviceId = null) {
 
             ctx.changeDialog.form['serviceType'] = service['custrecord_service'];
             ctx.changeDialog.form['serviceDescription'] = service['custrecord_service_description'];
+            ctx.changeDialog.form['custrecord_trial_end_date'] = ctx.changeDialog.form['custrecord_trial_end_date'] ? ctx.globalTrialEndDate : '';
+            ctx.changeDialog.form['custrecord_servicechg_date_ceased'] = ctx.changeDialog.form['custrecord_servicechg_date_ceased'] ? ctx.globalEffectiveDate : '';
             ctx.changeDialog.form['custrecord_servicechg_date_effective'] = ctx.globalEffectiveDate;
         }
     }
+}
+
+function _getBillingDateFromTrialExpiry(trialExpiryDate) {
+    if (Object.prototype.toString.call(trialExpiryDate) !== '[object Date]') return null;
+
+    let billingStartDate = new Date(trialExpiryDate.toISOString());
+    billingStartDate.setDate(billingStartDate.getDate() + 1);
+
+    return billingStartDate;
 }
 
 export const useServiceStore = defineStore('services', {

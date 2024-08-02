@@ -1,8 +1,9 @@
 <script setup>
 import { computed } from 'vue';
 import {useServiceStore} from '@/stores/services';
-import {formatPrice, formatDate, goToCustomerRecord} from '@/utils/utils.mjs';
+import {formatPrice, formatDate} from '@/utils/utils.mjs';
 
+const baseUrl = 'https://' + import.meta.env.VITE_NS_REALM + '.app.netsuite.com';
 const serviceStore = useServiceStore();
 const service = computed(() => {
     let i = serviceStore.data.all.findIndex(item => parseInt(item['internalid']) === parseInt(serviceStore.serviceIdToCease));
@@ -29,6 +30,10 @@ const frequencyText = computed(() => {
     return freqArray.join(', ')
 })
 
+function goToCustomerRecord(customerId) {
+    if (!customerId) return;
+    top.open(`${baseUrl}/app/common/entity/custjob.nl?id=${customerId}`, '_blank').focus();
+}
 </script>
 
 <template>

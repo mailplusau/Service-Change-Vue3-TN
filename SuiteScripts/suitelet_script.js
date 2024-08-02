@@ -213,7 +213,7 @@ const getOperations = {
             type: 'customrecord_commencement_register',
             filters: [
                 ['custrecord_commreg_sales_record', 'is', salesRecordId], 'AND',
-                ['custrecord_trial_status', 'anyof', [9, 10]], // Scheduled (9) or Quote (10)
+                ['custrecord_trial_status', 'anyof', [9, 10, 11]], // Scheduled (9), Quote (10) or Waiting T&C (11)
             ],
             columns: fieldIds
         }).run().each(result => _processSavedSearchResults(data, result));
@@ -358,7 +358,7 @@ const postOperations = {
 
         _writeResponseJson(response, serviceChangeId);
     },
-    'createCommencementRegister' : function(response, {customerId, salesRecordId, saleTypeId, commRegStatus, commencementDate, trialEndDate, signupDate}) {
+    'createCommencementRegister' : function(response, {customerId, salesRecordId, saleTypeId, commRegStatus, commencementDate, trialEndDate, billingStartDate, signupDate}) {
         let {record, runtime} = NS_MODULES;
         let userId = runtime['getCurrentUser']().id;
         let userRole = runtime['getCurrentUser']().role;
@@ -378,11 +378,14 @@ const postOperations = {
         commRegRecord.setValue({fieldId: 'custrecord_wkly_svcs', value: '5'}); // Weekly Services
         commRegRecord.setValue({fieldId: 'custrecord_in_out', value: 2}); // Inbound
         commRegRecord.setValue({fieldId: 'custrecord_state', value: state});
-        commRegRecord.setValue({fieldId: 'custrecord_trial_status', value: commRegStatus}); // Quote (10) or Scheduled (9)
+        commRegRecord.setValue({fieldId: 'custrecord_trial_status', value: commRegStatus});
         commRegRecord.setValue({fieldId: 'custrecord_sale_type', value: saleTypeId});
 
         if (trialEndDate && isoStringRegex.test(trialEndDate))
             commRegRecord.setValue({fieldId: 'custrecord_trial_expiry', value: new Date(trialEndDate)});
+
+        if (billingStartDate && isoStringRegex.test(billingStartDate))
+            commRegRecord.setValue({fieldId: 'custrecord_bill_date', value: new Date(billingStartDate)});
 
         if (userRole !== 1000) commRegRecord.setValue({fieldId: 'custrecord_franchisee', value: partnerId});
         if (salesRecordId) commRegRecord.setValue({fieldId: 'custrecord_commreg_sales_record', value: salesRecordId});
@@ -427,8 +430,9 @@ const postOperations = {
 
         _writeResponseJson(response, `Effective date has been set to ${dateEffective}`);
     },
-    'updateTrialEndDate' : function (response, {commRegId, trialEndDate}) {
-        if (!isoStringRegex.test(trialEndDate)) throw `Effective date [${trialEndDate}] is not a valid date`;
+    'updateTrialEndDate' : function (response, {commRegId, trialEndDate, billingStartDate}) {
+        if (!isoStringRegex.test(trialEndDate)) throw `Trial expiry date [${trialEndDate}] is not a valid date`;
+        if (!isoStringRegex.test(billingStartDate)) throw `Billing start date [${billingStartDate}] is not a valid date`;
         if (!commRegId) throw `Commencement Register ID not specified`;
 
         trialEndDate = new Date(trialEndDate);
@@ -445,7 +449,10 @@ const postOperations = {
             record['submitFields']({type: 'customrecord_servicechg', id: item.internalid, values: {'custrecord_trial_end_date': trialEndDate}});
         });
 
-        record['submitFields']({type: 'customrecord_commencement_register', id: commRegId, values: {'custrecord_trial_expiry': trialEndDate}});
+        record['submitFields']({type: 'customrecord_commencement_register', id: commRegId, values: {
+            'custrecord_trial_expiry': trialEndDate,
+            'custrecord_bill_date': new Date(billingStartDate),
+        }});
 
         _writeResponseJson(response, `Trial end date has been set to ${trialEndDate}`);
     }

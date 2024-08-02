@@ -1,5 +1,5 @@
 <script setup>
-import {ref, defineModel, computed, watch, defineEmits} from "vue";
+import {ref, defineModel, computed, watch, defineEmits, defineProps} from "vue";
 const model = defineModel({
     required: true,
 });
@@ -16,6 +16,10 @@ const props = defineProps({
     disabled: {
         type: Boolean,
         default: false,
+    },
+    min: {
+        type: String,
+        default: '',
     }
 })
 const dialogOpen = ref(false);
@@ -47,7 +51,7 @@ const displayDate = computed(() => dateFormat.format(model.value))
         </template>
 
         <template v-slot:default="{ isActive }">
-            <v-date-picker v-model="selectedDate" class="bg-background" color="primary" :title="title">
+            <v-date-picker v-model="selectedDate" class="bg-background" color="primary" :title="title" :min="''">
                 <template v-slot:actions>
                     <v-btn @click="dialogOpen = false">cancel</v-btn>
                     <v-btn variant="elevated" color="green" @click="update">apply change</v-btn>

@@ -68,14 +68,16 @@ function cancelServiceChange() {
             </v-menu>
         </td>
     </tr>
+
     <tr class="service-expanded-info text-grey-darken-2" v-else-if="item['isinactive']">
         <td class="pl-7" :colspan="columns.length">
             <v-icon class="mr-2">mdi-subdirectory-arrow-right</v-icon>
             <v-chip label color="green-darken-4" size="x-small">
-                Extra Service
+                {{ serviceChange['custrecord_servicechg_type'] }}
             </v-chip>
         </td>
     </tr>
+
     <tr class="service-expanded-info text-grey-darken-2" v-else-if="!!serviceChange">
         <td class="pl-7">
             <v-icon class="mr-2">mdi-subdirectory-arrow-right</v-icon>

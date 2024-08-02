@@ -1,5 +1,5 @@
 <script setup>
-import {computed, ref} from 'vue';
+import {computed} from 'vue';
 import ServiceChangeRow from '@/views/services/components/ServiceChangeRow.vue';
 import {useServiceStore} from '@/stores/services';
 import ServiceChangeDialog from '@/views/services/components/ServiceChangeDialog.vue';
@@ -7,7 +7,9 @@ import DatePicker from '@/components/shared/DatePicker.vue';
 import ServiceCancellationDialog from '@/views/services/components/ServiceCancellationDialog.vue';
 import {useMainStore} from '@/stores/main';
 import ServiceFinalisationDialog from '@/views/services/components/ServiceFinalisationDialog.vue';
+import {useUserStore} from '@/stores/user';
 
+const userStore = useUserStore();
 const serviceStore = useServiceStore();
 const mainStore = useMainStore();
 const AUDollar = new Intl.NumberFormat('en-US', {
@@ -40,6 +42,15 @@ function closeParentDialog() {
 }
 
 const dataLoading = computed(() => serviceStore.data.loading)
+const minEffectiveDate = computed(() => userStore.isAdmin ? '' : (new Date()).toISOString())
+const minTrialExpiryDate = computed(() => {
+    if (userStore.isAdmin || Object.prototype.toString.call(serviceStore.globalTrialEndDate) !== '[object Date]') return '';
+
+    let minDate = new Date(serviceStore.globalTrialEndDate['toISOString']())
+    minDate.setDate(minDate.getDate() + 5);
+
+    return minDate.toISOString();
+})
 </script>
 
 <template>
@@ -51,7 +62,7 @@ const dataLoading = computed(() => serviceStore.data.loading)
                     <span class="ml-4 mr-1">Effective Date:</span>
                     <span v-if="dataLoading" class="cursor-pointer text-secondary">--/--/--</span>
                     <DatePicker v-else v-model="serviceStore.globalEffectiveDate" readonly title="Global Effective Date"
-                                @date-changed="serviceStore.handleEffectiveDateChanged()">
+                                @date-changed="serviceStore.handleEffectiveDateChanged()" :min="minEffectiveDate">
                         <template v-slot:activator="{ activatorProps, displayDate, readonly }">
                             <span v-bind="activatorProps" class="cursor-pointer text-secondary" title="Click to edit">{{ displayDate }}
                                 <v-icon size="x-small" class="mb-1">mdi-pencil</v-icon>
@@ -64,7 +75,7 @@ const dataLoading = computed(() => serviceStore.data.loading)
                     <v-toolbar-title style="flex: none" class="text-subtitle-1" v-if="!!serviceStore.globalTrialEndDate">
                         Trial Expiry Date:
                         <DatePicker v-model="serviceStore.globalTrialEndDate" readonly title="Trial Expiry Date" :disabled="dataLoading"
-                                    @date-changed="serviceStore.handleTrialEndDateChanged()">
+                                    @date-changed="serviceStore.handleTrialEndDateChanged()" :min="minTrialExpiryDate">
                             <template v-slot:activator="{ activatorProps, displayDate, readonly }">
                                 <span v-bind="activatorProps" class="cursor-pointer text-secondary" title="Click to edit">{{ displayDate }}
                                     <v-icon size="x-small" class="mb-1">mdi-pencil</v-icon>
