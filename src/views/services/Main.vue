@@ -8,10 +8,13 @@ import ServiceCancellationDialog from '@/views/services/components/ServiceCancel
 import {useMainStore} from '@/stores/main';
 import ServiceFinalisationDialog from '@/views/services/components/ServiceFinalisationDialog.vue';
 import {useUserStore} from '@/stores/user';
+import {useCommRegStore} from '@/stores/comm-reg';
+import {formatDate} from '../../utils/utils.mjs';
 
 const userStore = useUserStore();
 const serviceStore = useServiceStore();
 const mainStore = useMainStore();
+const commRegStore = useCommRegStore();
 const AUDollar = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'AUD',
@@ -58,7 +61,7 @@ const minTrialExpiryDate = computed(() => {
         <v-row justify="center">
             <v-col xl="6" lg="8" md="10" cols="12">
 
-                <v-toolbar class="elevation-5 bg-primary" density="compact">
+                <v-toolbar class="elevation-5 bg-primary" density="compact" :extended="!!serviceStore.globalTrialEndDate">
                     <span class="ml-4 mr-1">Effective Date:</span>
                     <span v-if="dataLoading" class="cursor-pointer text-secondary">--/--/--</span>
                     <DatePicker v-else v-model="serviceStore.globalEffectiveDate" readonly title="Global Effective Date"
@@ -69,20 +72,6 @@ const minTrialExpiryDate = computed(() => {
                             </span>
                         </template>
                     </DatePicker>
-
-                    <v-divider vertical class="ml-5"></v-divider>
-
-                    <v-toolbar-title style="flex: none" class="text-subtitle-1" v-if="!!serviceStore.globalTrialEndDate">
-                        Trial Expiry Date:
-                        <DatePicker v-model="serviceStore.globalTrialEndDate" readonly title="Trial Expiry Date" :disabled="dataLoading"
-                                    @date-changed="serviceStore.handleTrialEndDateChanged()" :min="minTrialExpiryDate">
-                            <template v-slot:activator="{ activatorProps, displayDate, readonly }">
-                                <span v-bind="activatorProps" class="cursor-pointer text-secondary" title="Click to edit">{{ displayDate }}
-                                    <v-icon size="x-small" class="mb-1">mdi-pencil</v-icon>
-                                </span>
-                            </template>
-                        </DatePicker>
-                    </v-toolbar-title>
 
                     <v-spacer></v-spacer>
 
@@ -99,6 +88,25 @@ const minTrialExpiryDate = computed(() => {
                             </v-btn>
                         </template>
                     </ServiceFinalisationDialog>
+
+                    <template v-slot:extension v-if="!!serviceStore.globalTrialEndDate">
+                        <span class="ml-4 mr-1">Trial Expiry Date:</span>
+                        <DatePicker v-model="serviceStore.globalTrialEndDate" readonly title="Trial Expiry Date" :disabled="dataLoading"
+                                    @date-changed="serviceStore.handleTrialEndDateChanged()" :min="minTrialExpiryDate">
+                            <template v-slot:activator="{ activatorProps, displayDate, readonly }">
+                                <span v-bind="activatorProps" class="cursor-pointer text-secondary" title="Click to edit">{{ displayDate }}
+                                    <v-icon size="x-small" class="mb-1">mdi-pencil</v-icon>
+                                </span>
+                            </template>
+                        </DatePicker>
+
+                        <v-divider vertical class="ml-5"></v-divider>
+
+                        <span class="ml-4 mr-1">Billing Date:</span>
+                        <span class="text-secondary">
+                            {{ formatDate(new Date(commRegStore.details.custrecord_bill_date)) }}
+                        </span>
+                    </template>
                 </v-toolbar>
 
                 <v-data-table class="elevation-5 bg-background" hide-default-footer

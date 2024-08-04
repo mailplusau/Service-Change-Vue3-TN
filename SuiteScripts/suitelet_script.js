@@ -34,12 +34,7 @@ define(['N/ui/serverWidget', 'N/render', 'N/search', 'N/file', 'N/log', 'N/recor
             } else if (request.method === "POST") { // Request method should be POST (?)
                 _.handlePOSTRequests(JSON.parse(request.body), response);
                 // _writeResponseJson(response, {test: 'test response from post', params: request.parameters, body: request.body});
-            } else {
-                log.debug({
-                    title: "request method type",
-                    details: `method : ${request.method}`,
-                });
-            }
+            } else log.debug({ title: "request method type", details: `method : ${request.method}` });
 
         }
 
@@ -82,9 +77,9 @@ define(['N/ui/serverWidget', 'N/render', 'N/search', 'N/file', 'N/log', 'N/recor
                     filters: ['name', 'is', htmlPageName],
                     columns: ['name', 'url']
                 }).run().each(resultSet => {
-                    htmlPageData[resultSet.getValue({ name: 'name' })] = {
-                        url: resultSet.getValue({ name: 'url' }),
-                        id: resultSet.id
+                    htmlPageData[resultSet['getValue']({ name: 'name' })] = {
+                        url: resultSet['getValue']({ name: 'url' }),
+                        id: resultSet['id']
                     };
                     return true;
                 });
@@ -94,33 +89,29 @@ define(['N/ui/serverWidget', 'N/render', 'N/search', 'N/file', 'N/log', 'N/recor
             handleGETRequests(request, response) {
                 if (!request) return false;
 
-                let {log} = NS_MODULES;
-
                 try {
-                    let {operation, requestParams} = JSON.parse(request);
-
-                    if (!operation) throw 'No operation specified.';
+                    let {operation, requestParams} = this.validateRequest('GET', request);
 
                     if (operation === 'getIframeContents') this.getIframeContents(response);
-                    else if (!getOperations[operation]) throw `GET operation [${operation}] is not supported.`;
                     else getOperations[operation](response, requestParams);
                 } catch (e) {
-                    log.debug({title: "_handleGETRequests", details: `error: ${e}`});
+                    NS_MODULES.log.debug({title: "_handleGETRequests", details: `error: ${e}`});
+                    this.handleError(request, e)
                     _writeResponseJson(response, {error: `${e}`})
                 }
 
                 return true;
             },
-            handlePOSTRequests({operation, requestParams}, response) {
-                let {log} = NS_MODULES;
+            handlePOSTRequests(request, response) {
+                if (!request) return;
 
+                let {operation, requestParams} = this.validateRequest('POST', request);
                 try {
-                    if (!operation) throw 'No operation specified.';
 
-                    // _writeResponseJson(response, {source: '_handlePOSTRequests', operation, requestParams});
                     postOperations[operation](response, requestParams);
                 } catch (e) {
-                    log.debug({title: "_handlePOSTRequests", details: `error: ${e}`});
+                    NS_MODULES.log.debug({title: "_handlePOSTRequests", details: `error: ${e}`});
+                    this.handleError(JSON.stringify(request), e)
                     _writeResponseJson(response, {error: `${e}`})
                 }
             },
@@ -129,6 +120,29 @@ define(['N/ui/serverWidget', 'N/render', 'N/search', 'N/file', 'N/log', 'N/recor
                 const htmlFile = NS_MODULES.file.load({ id: htmlFileData[htmlTemplateFilename].id });
 
                 _writeResponseJson(response, htmlFile['getContents']());
+            },
+            validateRequest(method, request) {
+                let {operation, requestParams} = method === 'POST' ? request : JSON.parse(request);
+                if (!operation) throw 'No operation specified.';
+
+                if (method === 'POST' && !postOperations[operation]) throw `POST operation [${operation}] is not supported.`;
+                else if (method === 'GET' && !getOperations[operation] && operation !== 'getIframeContents')
+                    throw `GET operation [${operation}] is not supported.`;
+
+                return {operation, requestParams};
+            },
+            handleError(request, e) {
+                try {
+                    const currentScript = NS_MODULES.runtime['getCurrentScript']();
+                    NS_MODULES.email['sendBulk'].promise({
+                        author: 112209,
+                        body: `User: ${JSON.stringify(NS_MODULES.runtime['getCurrentUser']())}<br><br>Incoming request data: ${request}<br><br>Stacktrace: ${e}`,
+                        subject: `[SCRIPT=${currentScript.id}][DEPLOY=${currentScript.deploymentId}]`,
+                        recipients: ['tim.nguyen@mailplus.com.au'],
+                        isInternalOnly: true
+                    });
+                    NS_MODULES.log.error('Error handled', `${e}`);
+                } catch (error) { NS_MODULES.log.error('failed to handle error', `${error}`); }
             }
         }
 
@@ -436,6 +450,7 @@ const postOperations = {
         if (!commRegId) throw `Commencement Register ID not specified`;
 
         trialEndDate = new Date(trialEndDate);
+        billingStartDate = new Date(billingStartDate);
         let {record} = NS_MODULES;
         let serviceChanges = sharedFunctions.getServiceChangesByFilters([
             ["custrecord_servicechg_comm_reg", "is", commRegId],
@@ -446,12 +461,15 @@ const postOperations = {
         ]);
 
         serviceChanges.forEach(item => {
-            record['submitFields']({type: 'customrecord_servicechg', id: item.internalid, values: {'custrecord_trial_end_date': trialEndDate}});
+            record['submitFields']({type: 'customrecord_servicechg', id: item.internalid, values: {
+                'custrecord_trial_end_date': trialEndDate,
+                'custrecord_servicechg_bill_date': billingStartDate
+            }});
         });
 
         record['submitFields']({type: 'customrecord_commencement_register', id: commRegId, values: {
             'custrecord_trial_expiry': trialEndDate,
-            'custrecord_bill_date': new Date(billingStartDate),
+            'custrecord_bill_date': billingStartDate,
         }});
 
         _writeResponseJson(response, `Trial end date has been set to ${trialEndDate}`);

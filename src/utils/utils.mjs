@@ -107,7 +107,8 @@ export const serviceChangeDefaults = {
 
     custrecord_servicechg_date_effective: '', // Date - Effective
     custrecord_servicechg_date_ceased: '', // Date - Ceased
-    custrecord_trial_end_date: '', //Trial End Date
+    custrecord_trial_end_date: '', // Trial End Date
+    custrecord_servicechg_bill_date: '', // Billing Date
 
     custrecord_servicechg_old_price: 0, // Old Price
     custrecord_servicechg_old_freq: '', // Old Frequency

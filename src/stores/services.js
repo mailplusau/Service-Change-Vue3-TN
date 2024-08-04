@@ -2,13 +2,13 @@ import { defineStore } from 'pinia';
 import http from '@/utils/http.mjs';
 import {useCustomerStore} from '@/stores/customer';
 import {useCommRegStore} from '@/stores/comm-reg';
-import {COMM_REG_STATUS, offsetDateObjectForNSDateField, SERVICE_CHANGE_STATUS, serviceChangeDefaults} from '@/utils/utils.mjs';
+import {COMM_REG_STATUS, getNextWorkingDate, offsetDateObjectForNSDateField, SERVICE_CHANGE_STATUS, serviceChangeDefaults} from '@/utils/utils.mjs';
 import {useUserStore} from '@/stores/user';
 import {useMainStore} from '@/stores/main';
 import {useDataStore} from '@/stores/data';
 import {useGlobalDialog} from '@/stores/global-dialog';
 
-const dateFields = ['custrecord_servicechg_date_effective', 'custrecord_servicechg_date_ceased', 'custrecord_trial_end_date'];
+const dateFields = ['custrecord_servicechg_date_effective', 'custrecord_servicechg_date_ceased', 'custrecord_trial_end_date', 'custrecord_servicechg_bill_date'];
 let isoStringRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/;
 
 const state = {
@@ -83,34 +83,33 @@ const actions = {
     async handleEffectiveDateChanged() {
         if (!useCommRegStore().id) return;
 
-        useGlobalDialog().displayBusy('Processing', 'Applying new effective date. Please wait...');
+        useGlobalDialog().displayBusy('', 'Applying new effective date. Please wait...');
 
         await http.post('updateEffectiveDate', {commRegId: useCommRegStore().id, dateEffective: offsetDateObjectForNSDateField(this.globalEffectiveDate)});
-        useCommRegStore().details.custrecord_comm_date = this.globalEffectiveDate.toISOString();
-        useCommRegStore().texts.custrecord_comm_date = this.globalEffectiveDate.toLocaleDateString();
-        for (let serviceChange of this.changes.all) serviceChange['custrecord_servicechg_date_effective'] = this.globalEffectiveDate.toLocaleDateString();
 
-        useGlobalDialog().close();
+        await useCommRegStore().init();
+        await this.init();
+
+        useGlobalDialog().close().then();
     },
     async handleTrialEndDateChanged() {
         if (!useCommRegStore().id) return;
 
-        useGlobalDialog().displayBusy('Processing', 'Applying new trial expiry date. Please wait...');
+        useGlobalDialog().displayBusy('', 'Applying new trial expiry date. Please wait...');
 
         await http.post('updateTrialEndDate', {
             commRegId: useCommRegStore().id,
             trialEndDate: offsetDateObjectForNSDateField(this.globalTrialEndDate),
-            billingStartDate: offsetDateObjectForNSDateField(_getBillingDateFromTrialExpiry(this.globalTrialEndDate))
+            billingStartDate: offsetDateObjectForNSDateField(getNextWorkingDate(this.globalTrialEndDate))
         });
 
-        useCommRegStore().details.custrecord_trial_expiry = this.globalTrialEndDate.toISOString();
-        useCommRegStore().texts.custrecord_trial_expiry = this.globalTrialEndDate.toLocaleDateString();
-        for (let serviceChange of this.changes.all) serviceChange['custrecord_trial_end_date'] = this.globalEffectiveDate.toLocaleDateString();
+        await useCommRegStore().init();
+        await this.init();
 
-        useGlobalDialog().close();
+        useGlobalDialog().close().then();
     },
     async saveServiceChange() {
-        useGlobalDialog().displayBusy('Processing', 'Saving Service Change...');
+        useGlobalDialog().displayBusy('', 'Saving Service Change...');
 
         await _saveServiceChange(this);
 
@@ -118,7 +117,7 @@ const actions = {
 
         this.changeDialog.open = false;
         
-        useGlobalDialog().close();
+        useGlobalDialog().close().then();
     },
     async cancelService() {
         let serviceId = parseInt(this.serviceIdToCease);
@@ -126,7 +125,7 @@ const actions = {
 
         if (!service) return;
 
-        useGlobalDialog().displayBusy('Processing', service.isinactive ? `Cancelling the creation of Service [${service.custrecord_service_text}]` : `Marking Service [${service.custrecord_service_text}] for Cancellation.`);
+        useGlobalDialog().displayBusy('', service.isinactive ? `Cancelling the creation of Service [${service.custrecord_service_text}]` : `Marking Service [${service.custrecord_service_text}] for Cancellation.`);
         
         if (service.isinactive) await http.post('cancelPendingService', {serviceId, commRegId: useCommRegStore().id})
         else {
@@ -139,7 +138,7 @@ const actions = {
 
         await _fetchAllData(this);
 
-        useGlobalDialog().close();
+        useGlobalDialog().close().then();
 
         this.serviceIdToCease = null;
     },
@@ -148,13 +147,13 @@ const actions = {
 
         if (!service) return;
 
-        useGlobalDialog().displayBusy('Processing', `Removing all pending changes of Service [${service.custrecord_service_text}]. Please wait...`);
+        useGlobalDialog().displayBusy('', `Removing all pending changes of Service [${service.custrecord_service_text}]. Please wait...`);
 
         await http.post('cancelChangesOfService', {serviceId, commRegId: useCommRegStore().id});
 
         await _fetchAllData(this);
 
-        useGlobalDialog().close();
+        useGlobalDialog().close().then();
     }
 };
 
@@ -191,11 +190,12 @@ async function _saveServiceChange(ctx) {
             useDataStore().serviceChangeTypes.filter(item => item.title === serviceChangeData['custrecord_servicechg_type'])[0].value,
             isQuote ? COMM_REG_STATUS.Quote : COMM_REG_STATUS.Waiting_TNC,
             offsetDateObjectForNSDateField(ctx.globalEffectiveDate), offsetDateObjectForNSDateField(ctx.globalTrialEndDate),
-            _getBillingDateFromTrialExpiry(ctx.globalTrialEndDate) || '');
+            offsetDateObjectForNSDateField(getNextWorkingDate(ctx.globalTrialEndDate)) || '');
 
         serviceChangeData['custrecord_servicechg_comm_reg'] = useCommRegStore().id;
     }
 
+    serviceChangeData['custrecord_servicechg_bill_date'] = getNextWorkingDate(ctx.globalTrialEndDate) || '';
     serviceChangeData['custrecord_servicechg_status'] = isQuote ? SERVICE_CHANGE_STATUS.Quote : SERVICE_CHANGE_STATUS.Scheduled;
     for (let fieldId of dateFields) serviceChangeData[fieldId] = offsetDateObjectForNSDateField(ctx.changeDialog.form[fieldId]);
 
@@ -233,6 +233,7 @@ function _prepareServiceChangeForm(ctx, serviceId = null) {
         custrecord_servicechg_type: 'Extra Service',
         custrecord_servicechg_date_effective: ctx.globalEffectiveDate,
         custrecord_trial_end_date: ctx.globalTrialEndDate || '',
+        custrecord_servicechg_bill_date: getNextWorkingDate(ctx.globalTrialEndDate) || '',
     };
 
     if (serviceId) {
@@ -262,20 +263,8 @@ function _prepareServiceChangeForm(ctx, serviceId = null) {
 
             ctx.changeDialog.form['serviceType'] = service['custrecord_service'];
             ctx.changeDialog.form['serviceDescription'] = service['custrecord_service_description'];
-            ctx.changeDialog.form['custrecord_trial_end_date'] = ctx.changeDialog.form['custrecord_trial_end_date'] ? ctx.globalTrialEndDate : '';
-            ctx.changeDialog.form['custrecord_servicechg_date_ceased'] = ctx.changeDialog.form['custrecord_servicechg_date_ceased'] ? ctx.globalEffectiveDate : '';
-            ctx.changeDialog.form['custrecord_servicechg_date_effective'] = ctx.globalEffectiveDate;
         }
     }
-}
-
-function _getBillingDateFromTrialExpiry(trialExpiryDate) {
-    if (Object.prototype.toString.call(trialExpiryDate) !== '[object Date]') return null;
-
-    let billingStartDate = new Date(trialExpiryDate.toISOString());
-    billingStartDate.setDate(billingStartDate.getDate() + 1);
-
-    return billingStartDate;
 }
 
 export const useServiceStore = defineStore('services', {
