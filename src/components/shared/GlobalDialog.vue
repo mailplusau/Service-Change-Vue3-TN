@@ -1,7 +1,10 @@
 <script setup>
 import { useGlobalDialog } from "@/stores/global-dialog";
+import {computed} from 'vue';
 
 const globalDialog = useGlobalDialog();
+
+const niceProgress = computed(() => Math.floor(globalDialog.progress) + '%')
 </script>
 
 <template>
@@ -11,24 +14,22 @@ const globalDialog = useGlobalDialog();
         :persistent="globalDialog.persistent"
     >
         <v-card class="bg-background">
-            <v-card-title :class="'text-h5' + (globalDialog.isError ? ' red--text' : '')">
+            <v-card-title :class="'text-h5' + (globalDialog.isError ? ' red--text' : '')" v-if="globalDialog.title">
                 <v-icon v-show="globalDialog.isError" class="mr-2" color="red">mdi-alert-outline</v-icon>
                 {{ globalDialog.title }}
             </v-card-title>
 
+            <v-card-text :class="globalDialog.busy ? 'text-center' : ''">
+                <div v-html="globalDialog.body"></div>
+                <v-progress-linear v-show="globalDialog.busy" color="primary" :model-value="globalDialog.progress" striped height="5"
+                                   :indeterminate="globalDialog.progress < 0 || globalDialog.progress > 100 || globalDialog.progress === null">
 
-            <v-card-text v-show="globalDialog.busy" class="text-center">
-                <v-progress-circular
-                    :indeterminate="globalDialog.progress < 0 || globalDialog.progress > 100 || globalDialog.progress === null"
-                    :model-value="globalDialog.progress"
-                    color="primary"
-                    size="50"
-                >{{ (globalDialog.progress >= 0 && 100 >= globalDialog.progress) ? globalDialog.progress + '%' : '' }}</v-progress-circular>
+                </v-progress-linear>
+                {{ (globalDialog.progress >= 0 && 100 >= globalDialog.progress && globalDialog.showProgressPercent) ? niceProgress : '' }}
+
             </v-card-text>
 
-            <v-card-text :class="globalDialog.busy ? 'text-center' : ''" v-html="globalDialog.body"></v-card-text>
-
-            <v-card-actions>
+            <v-card-actions v-if="!globalDialog.hideButtons">
                 <template v-for="(button, index) in globalDialog.buttons">
                     <v-spacer v-if="typeof button === 'string' && button === 'spacer'" :key="'button' + index"></v-spacer>
                     <v-btn v-else-if="typeof button === 'object'" :key="'button' + index"

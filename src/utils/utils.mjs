@@ -195,6 +195,21 @@ export function offsetDateObjectForNSDateField(dateObject) {
     return dateObject.getFullYear() + '-' + `${dateObject.getMonth() + 1}`.padStart(2, '0') + '-' + `${dateObject.getDate()}`.padStart(2, '0') + 'T00:00:00.000';
 }
 
+export function getNextWorkingDate(dateObject) {
+    if (Object.prototype.toString.call(dateObject) !== '[object Date]') return null;
+
+    let nextWorkingDate = new Date(dateObject.toISOString());
+    nextWorkingDate.setDate(nextWorkingDate.getDate() + (dateObject.getDay() < 5 ? 1 : 8 - dateObject.getDay()));
+
+    return nextWorkingDate;
+}
+
+export function waitMilliseconds(millis = 1000) {
+    return new Promise(resolve => {
+        setTimeout(() => resolve(), millis)
+    })
+}
+
 export function formatPrice(price) {
     return AUDollar.format(price);
 }
