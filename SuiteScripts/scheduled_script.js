@@ -133,9 +133,9 @@ function _updateFinancialItemsOfCustomer(customerId) {
     const sublistId = 'itemPricing'.toLowerCase();
     const customerRecord = NS_MODULES.record.load({type: 'customer', id: customerId, isDynamic: true});
 
-    // Wipe financial tab
+    // Wipe financial tab (going backward because line numbers are just array indexes)
     const lineCount = customerRecord['getLineCount']({sublistId});
-    for (let line = 0; line < lineCount; line++) customerRecord['removeLine']({sublistId, line});
+    for (let line = lineCount - 1; line >= 0; line--) customerRecord['removeLine']({sublistId, line});
 
     // Re-populate financial tab using only active services
     utils.getServicesByFilters([
@@ -149,10 +149,9 @@ function _updateFinancialItemsOfCustomer(customerId) {
         customerRecord['setCurrentSublistValue']({sublistId, fieldId: 'item', value: service['custrecord_service_ns_item']});
         customerRecord['setCurrentSublistValue']({sublistId, fieldId: 'level', value: -1});
         customerRecord['setCurrentSublistValue']({sublistId, fieldId: 'price', value: service['custrecord_service_price']});
-    })
 
-    // Commit the line
-    customerRecord['commitLine']({sublistId});
+        customerRecord['commitLine']({sublistId});
+    })
 
     // Save customer record
     customerRecord.save({ignoreMandatoryFields: true});
