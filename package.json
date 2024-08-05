@@ -14,7 +14,7 @@
     "upload-s.script": "node netsuite.upload.mjs SuiteScripts\\scheduled_script.js resolve:env resolve:imports resolve:filenames"
   },
   "netsuite": {
-    "projectName": "test_page",
+    "projectName": "service_change",
     "suffixName": "tn_v2_vue"
   },
   "dependencies": {

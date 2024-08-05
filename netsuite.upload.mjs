@@ -297,9 +297,9 @@ function resolveFilename(filePath, fileContent) {
             || `mp_sl_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.js`,
         "client_script.js": packageJson.netsuite['clientFilename']
             || `mp_cl_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.js`,
-        "scheduled_script": packageJson.netsuite['scheduledScriptName']
+        "scheduled_script.js": packageJson.netsuite['scheduledScriptName']
             || `mp_sc_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.js`,
-        "mare_script": packageJson.netsuite['mapReduceScriptName']
+        "mare_script.js": packageJson.netsuite['mapReduceScriptName']
             || `mp_mr_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.js`,
     };
 
