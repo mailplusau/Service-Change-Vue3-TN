@@ -3,6 +3,7 @@ import {commRegDefaults, offsetDateObjectForNSDateField} from '@/utils/utils.mjs
 import http from '@/utils/http.mjs';
 import {useSalesRecordStore} from '@/stores/sales-record';
 import {useCustomerStore} from '@/stores/customer';
+import {useGlobalDialog} from '@/stores/global-dialog';
 
 const state = {
     id: null,
@@ -50,12 +51,18 @@ async function _getCommencementRegister(ctx) {
     for (let fieldId in ctx.details) fieldIds.push(fieldId);
     fieldIds = fieldIds.map(fieldId => (fieldId === 'internalid' && !!ctx.id) ? 'id' : fieldId)
 
-    let data = !!ctx.id ?
-        await http.get('getCommencementRegister', { commRegId: ctx.id, fieldIds }) :
-        await http.get('getCommRegFromSalesRecordId', { salesRecordId: useSalesRecordStore().id, fieldIds });
+    if (!ctx.id) {
+        const commRegs = await http.get('getCommRegsByCustomerId', { customerId: useCustomerStore().id });
 
-    if (!data['id']) return ctx.loading = false;
-    if (!ctx.id) ctx.id = data['id'];
+        if (commRegs.length > 1) {
+            useGlobalDialog().displayError('Error', 'There are more than one Commencement Register with the status of either Waiting T&C, In Trial or Scheduled', 500, true);
+            return;
+        } else if (commRegs.length === 1) ctx.id = commRegs[0]['internalid'];
+    }
+
+    if (!ctx.id) return ctx.loading = false;
+
+    let data = await http.get('getCommencementRegister', { commRegId: ctx.id, fieldIds });
 
     for (let fieldId in ctx.details) {
         ctx.details[fieldId] = data[fieldId];

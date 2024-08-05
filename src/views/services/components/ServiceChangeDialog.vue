@@ -5,7 +5,9 @@ import DatePicker from '@/components/shared/DatePicker.vue';
 import {computed, ref} from 'vue';
 import {useDataStore} from '@/stores/data';
 import {useUserStore} from '@/stores/user';
+import {useCustomerStore} from '@/stores/customer';
 
+const customerStore = useCustomerStore();
 const serviceStore = useServiceStore();
 const dataStore = useDataStore();
 const userStore = useUserStore();
@@ -21,9 +23,19 @@ const dialogTitle = computed(() => {
     return `Changing Service ${index >= 0 ? serviceStore.data.all[index]['custrecord_service_text'] : '[unknown]'}`;
 });
 
-const serviceTypes = computed(() => dataStore.serviceTypes.filter(item => serviceStore.serviceTypesInUse.indexOf(item.value) < 0))
+const serviceTypes = computed(() => dataStore.serviceTypes.filter(item => {
+    let serviceTypeIdsToShow = [1,58,50,51,52,53,3,7,101,102,49,8,6,99,100,30,9,65,66,24,31,32,47,48,40,4,59];
+
+    return (userStore.isAdmin || serviceTypeIdsToShow.includes(parseInt(item.value))) && serviceStore.serviceTypesInUse.indexOf(item.value) < 0
+}))
+
 const serviceChangeTypes = computed(() => dataStore.serviceChangeTypes
-    .filter(item => userStore.isAdmin || ['extra service', 'change of frequency', 'change of price', 'change of service', 're-sign', 'save'].includes(item.title.trim().toLowerCase()))
+    .filter(item => {
+        if (userStore.isAdmin) return true;
+        if (customerStore.status !== 13) return ['new customer'].includes(item.title.trim().toLowerCase()); // any status that is not Signed
+
+        return ['extra service', 'change of frequency', 'change of price', 'change of service', 're-sign', 'save'].includes(item.title.trim().toLowerCase());
+    })
     .map(item => ({value: item.title, title: item.title})));
 
 function getFreqByTerm(term) {

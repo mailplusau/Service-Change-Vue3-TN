@@ -10,7 +10,8 @@ const state = {
 };
 
 const getters = {
-
+    status : state => parseInt(state.details.entitystatus),
+    isSigned : state => parseInt(state.details.entitystatus) === 13,
 };
 
 const actions = {

@@ -4,6 +4,7 @@ import http from '@/utils/http.mjs';
 const state = {
     id: null,
     role: null,
+    isMe : state => state.id === 1732844,
 };
 
 const getters = {

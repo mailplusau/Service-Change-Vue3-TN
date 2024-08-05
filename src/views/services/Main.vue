@@ -104,7 +104,7 @@ const minTrialExpiryDate = computed(() => {
 
                         <span class="ml-4 mr-1">Billing Date:</span>
                         <span class="text-secondary">
-                            {{ formatDate(new Date(commRegStore.details.custrecord_bill_date)) }}
+                            {{ commRegStore.details.custrecord_bill_date ? formatDate(new Date(commRegStore.details.custrecord_bill_date)) : 'Commencement Register not created' }}
                         </span>
                     </template>
                 </v-toolbar>
@@ -148,6 +148,10 @@ const minTrialExpiryDate = computed(() => {
                 </v-data-table>
 
             </v-col>
+        </v-row>
+
+        <v-row v-if="userStore.isMe">
+            <p>Comm Reg ID: [{{commRegStore.id}}]</p>
         </v-row>
 
         <ServiceChangeDialog />

@@ -132,6 +132,7 @@ const actions = {
             _prepareServiceChangeForm(this, serviceId);
 
             this.changeDialog.form['custrecord_servicechg_date_ceased'] = this.globalEffectiveDate;
+            this.changeDialog.form['custrecord_servicechg_type'] = 'Reduction of Service';
 
             await _saveServiceChange(this);
         }
@@ -183,18 +184,20 @@ function _findServiceChangeByServiceId(ctx, serviceId) {
 
 async function _saveServiceChange(ctx) {
     let serviceChangeData = JSON.parse(JSON.stringify(ctx.changeDialog.form));
-    let isQuote = (!useMainStore().extraParams.closedWon && !useMainStore().extraParams.freeTrial);
+    let isQuote = useCustomerStore().status !== 13 && (!useMainStore().extraParams.closedWon && !useMainStore().extraParams.freeTrial);
 
     if (!useCommRegStore().id) { // create a comm reg
+        let saleTypeId = useDataStore().serviceChangeTypes.filter(item => item.title.toLowerCase() === (useCustomerStore().isSigned ? 'change of service' : 'new customer'))?.[0]?.value || 24;
+
         await useCommRegStore().createNewCommReg(
-            useDataStore().serviceChangeTypes.filter(item => item.title === serviceChangeData['custrecord_servicechg_type'])[0].value,
+            saleTypeId,
             isQuote ? COMM_REG_STATUS.Quote : COMM_REG_STATUS.Waiting_TNC,
             offsetDateObjectForNSDateField(ctx.globalEffectiveDate), offsetDateObjectForNSDateField(ctx.globalTrialEndDate),
             offsetDateObjectForNSDateField(getNextWorkingDate(ctx.globalTrialEndDate)) || '');
 
-        serviceChangeData['custrecord_servicechg_comm_reg'] = useCommRegStore().id;
     }
 
+    serviceChangeData['custrecord_servicechg_comm_reg'] = useCommRegStore().id;
     serviceChangeData['custrecord_servicechg_bill_date'] = getNextWorkingDate(ctx.globalTrialEndDate) || '';
     serviceChangeData['custrecord_servicechg_status'] = isQuote ? SERVICE_CHANGE_STATUS.Quote : SERVICE_CHANGE_STATUS.Scheduled;
     for (let fieldId of dateFields) serviceChangeData[fieldId] = offsetDateObjectForNSDateField(ctx.changeDialog.form[fieldId]);
@@ -230,10 +233,7 @@ async function _saveServiceChange(ctx) {
 function _prepareServiceChangeForm(ctx, serviceId = null) {
     ctx.changeDialog.form = {
         ...ctx.changeDialog.defaults,
-        custrecord_servicechg_type: 'Extra Service',
-        custrecord_servicechg_date_effective: ctx.globalEffectiveDate,
-        custrecord_trial_end_date: ctx.globalTrialEndDate || '',
-        custrecord_servicechg_bill_date: getNextWorkingDate(ctx.globalTrialEndDate) || '',
+        custrecord_servicechg_type: useCustomerStore().status !== 13 ? 'New Customer' : 'Extra Service', // anything not Signed (13)
     };
 
     if (serviceId) {
@@ -250,20 +250,26 @@ function _prepareServiceChangeForm(ctx, serviceId = null) {
                     .filter(item => item);
 
                 ctx.changeDialog.form = {
-                    ...ctx.changeDialog.form, ...{
-                        custrecord_servicechg_type: '',
-                        custrecord_servicechg_service: service.internalid, // Associated service ID
-                        custrecord_default_servicechg_record: '', // existing service but no service change found, meaning it was created previously in the past, so this service change record is not a default one, we leave it empty
-                        custrecord_servicechg_old_price: service.custrecord_service_price,
-                        custrecord_servicechg_old_freq: freqArray.join(','),
-                        custrecord_servicechg_new_freq: freqArray.join(','),
-                    }
+                    ...ctx.changeDialog.form,
+                    custrecord_servicechg_type: '',
+                    custrecord_servicechg_service: service.internalid, // Associated service ID
+                    custrecord_default_servicechg_record: '', // existing service but no service change found, meaning it was created previously in the past, so this service change record is not a default one, we leave it empty
+                    custrecord_servicechg_old_price: service.custrecord_service_price,
+                    custrecord_servicechg_old_freq: freqArray.join(','),
+                    custrecord_servicechg_new_freq: freqArray.join(','),
                 };
             }
 
             ctx.changeDialog.form['serviceType'] = service['custrecord_service'];
             ctx.changeDialog.form['serviceDescription'] = service['custrecord_service_description'];
         }
+    }
+
+    ctx.changeDialog.form = {
+        ...ctx.changeDialog.form,
+        custrecord_servicechg_date_effective: ctx.globalEffectiveDate,
+        custrecord_trial_end_date: ctx.globalTrialEndDate || '',
+        custrecord_servicechg_bill_date: getNextWorkingDate(ctx.globalTrialEndDate) || '',
     }
 }
 

@@ -6,7 +6,7 @@
  * @created 17/06/2024
  */
 
-import {serviceChangeDefaults, serviceFieldIds, VARS} from '@/utils/utils.mjs';
+import {serviceChangeDefaults, serviceFieldIds, commRegDefaults, VARS} from '@/utils/utils.mjs';
 
 // These variables will be injected during upload. These can be changed under 'netsuite' of package.json
 let htmlTemplateFilename/**/;
@@ -137,7 +137,7 @@ define(['N/ui/serverWidget', 'N/render', 'N/search', 'N/file', 'N/log', 'N/recor
                     NS_MODULES.email['sendBulk'].promise({
                         author: 112209,
                         body: `User: ${JSON.stringify(NS_MODULES.runtime['getCurrentUser']())}<br><br>Incoming request data: ${request}<br><br>Stacktrace: ${e}`,
-                        subject: `[SCRIPT=${currentScript.id}][DEPLOY=${currentScript.deploymentId}]`,
+                        subject: `[ERROR][SCRIPT=${currentScript.id}][DEPLOY=${currentScript.deploymentId}]`,
                         recipients: ['tim.nguyen@mailplus.com.au'],
                         isInternalOnly: true
                     });
@@ -203,7 +203,7 @@ const getOperations = {
 
         _writeResponseJson(response, data);
     },
-    'getCommencementRegister' : function (response, {commRegId, fieldIds}) {
+    'getCommencementRegister' : function (response, {commRegId}) {
         let {record} = NS_MODULES;
         let data = {};
 
@@ -212,7 +212,7 @@ const getOperations = {
             id: commRegId,
         });
 
-        for (let fieldId of fieldIds) {
+        for (let fieldId in commRegDefaults) {
             data[fieldId] = commRegRecord.getValue({fieldId});
             data[fieldId + '_text'] = commRegRecord.getText({fieldId});
         }
@@ -232,7 +232,22 @@ const getOperations = {
             columns: fieldIds
         }).run().each(result => _processSavedSearchResults(data, result));
 
-        _writeResponseJson(response, data); // return the first result
+        _writeResponseJson(response, data);
+    },
+    'getCommRegsByCustomerId' : function (response, {customerId}) {
+        let {search} = NS_MODULES;
+        let data = [];
+
+        search.create({
+            type: 'customrecord_commencement_register',
+            filters: [
+                ['custrecord_customer', 'is', customerId], 'AND',
+                ['custrecord_trial_status', 'anyof', [9, 10, 11]], // Scheduled (9), Quote (10) or Waiting T&C (11)
+            ],
+            columns: Object.keys(commRegDefaults)
+        }).run().each(result => _processSavedSearchResults(data, result));
+
+        _writeResponseJson(response, data);
     },
     'getCustomerDetails': function (response, {customerId, fieldIds}) {
         if (!customerId) throw `Invalid Customer ID: ${customerId}`;
