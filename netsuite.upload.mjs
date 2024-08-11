@@ -1,4 +1,4 @@
-import parseImports from 'parse-imports';
+import parseImports from 'parse-imports'
 import superagent from 'superagent';
 import fs from 'fs';
 import crypto from "crypto";
@@ -6,18 +6,16 @@ import path from 'path';
 import OAuth from "oauth-1.0a";
 import compareVersions from "compare-versions";
 import url from "url";
-import {} from 'dotenv/config';
+import {} from 'dotenv/config'
 
 // A roundabout way to use require() so that we can read package.json file
-import {createRequire} from "module";
-
+import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const packageJson = require("./package.json");
 
 // This is so that we can have __dirname like CommonJS
-import {fileURLToPath} from 'url';
-import {dirname} from 'path';
-
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -35,7 +33,7 @@ let config = {
     consumerToken: process.env.VITE_NS_CONSUMER_TOKEN,
     consumerSecret: process.env.VITE_NS_CONSUMER_SECRET,
     realm: process.env.VITE_NS_REALM,
-};
+}
 
 
 function getRelativePath(absFilePath) {
@@ -231,7 +229,7 @@ function hasNetSuiteError(customMsg, err, response) {
 function injectEnvVariables(fileContent) {
     for (let prop in process.env) {
         if (Object.prototype.hasOwnProperty.call(process.env, prop) && prop.indexOf('VITE_') > -1) {
-            fileContent = fileContent.replaceAll(`process.env.${prop}`, `"${process.env[prop]}"`);
+            fileContent = fileContent.replaceAll(`import.meta.env.${prop}`, `"${process.env[prop]}"`)
         }
     }
 
@@ -257,11 +255,11 @@ async function injectImportStatements(fileContent) {
             let originalImport = fileContent.substring($import.startIndex, $import.endIndex);
             let replacement = `\r\n// ${originalImport}\r\n`;
 
-            for (let [index, item] of $import.importClause.named.entries()) {
+            for (let item of $import.importClause.named) {
                 let funcArr = [];
 
                 // First we let stringify() replace the functions with their toString()
-                let content = JSON.stringify(moduleContents[item.specifier] || moduleContents['default'], function (key, value) {
+                let content = JSON.stringify(moduleContents[item.specifier] || moduleContents['default'], function(key, value) {
                     if (typeof value === 'function') {
                         let txt = value.toString()
                             .replace(`${key}()`, '()=>') // replace function name with arrow function
@@ -269,14 +267,15 @@ async function injectImportStatements(fileContent) {
                             .replace(/(\r\n|\r|\n)/g, ''); // trim all new line characters
                         funcArr.push(txt);
                         return txt;
-                    } else return value;
+                    }
+                    else return value;
                 });
 
                 // Then we replace the double quotes around the functions to make them usable
 
                 for (let item of funcArr) content = content.replace(`${JSON.stringify(item)}`, item);
 
-                replacement += `const ${item.binding} = ${content}` + (index < $import.importClause.named.length - 1 ? ';\r\n' : '');
+                replacement += `const ${item.binding} = ${content};\r\n`;
             }
 
             fileContent = replaceBetween(fileContent, $import.startIndex, $import.endIndex, replacement);
@@ -315,7 +314,7 @@ function resolveFilename(filePath, fileContent) {
 }
 
 function getHtmlFilename() {
-    return packageJson.netsuite['htmlFilename'] || `mp_cl_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.html`;
+    return packageJson.netsuite['htmlFilename'] || `mp_cl_${packageJson.netsuite.projectName}_${packageJson.netsuite.suffixName}.html`
 }
 
 (async () => {
