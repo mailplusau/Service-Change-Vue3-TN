@@ -58,7 +58,7 @@ function setFreqByTerm(term, isChecked) {
     else if ((term + '').toLowerCase() === 'adhoc')
         serviceStore.changeDialog.form.custrecord_servicechg_new_freq = isChecked ? '6' : '';
     else if (isChecked) {
-        serviceStore.changeDialog.form.custrecord_servicechg_new_freq = [...(new Set([...freqArray, terms.indexOf((term + '').toLowerCase()) + 1]))].join(',')
+        serviceStore.changeDialog.form.custrecord_servicechg_new_freq = [...(new Set([...freqArray, terms.indexOf((term + '').toLowerCase()) + 1]))].filter(item => item !== 6).join(',')
     } else {
         let termIndex = terms.indexOf((term + '').toLowerCase()) + 1;
         if (termIndex > 0) {
