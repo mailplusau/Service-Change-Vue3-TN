@@ -533,14 +533,26 @@ const sharedFunctions = {
         }).run().each(result => _processSavedSearchResults(data, result));
 
         return data;
+    },
+    getCommRegsByFilters(filters, additionalColumns = []) {
+        let data = [];
+
+        NS_MODULES.search.create({
+            type: "customrecord_commencement_register",
+            filters,
+            columns: [...Object.keys(commRegDefaults), ...additionalColumns]
+        }).run().each(result => _processSavedSearchResults(data, result));
+
+        return data;
     }
 }
 
 function _processSavedSearchResults(data, result) {
     let tmp = {};
     for (let column of result['columns']) {
-        tmp[column.name] = result['getValue'](column);
-        tmp[column.name + '_text'] = result['getText'](column);
+        let columnName = [...(column.join ? [column.join] : []), column.name].join('.');
+        tmp[columnName] = result['getValue'](column);
+        tmp[columnName + '_text'] = result['getText'](column);
     }
     data.push(tmp);
 
