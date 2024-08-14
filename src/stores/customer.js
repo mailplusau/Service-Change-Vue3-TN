@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia';
 import http from '@/utils/http.mjs';
-import { customerDefaults } from '@/utils/utils.mjs';
+import { customer as customerFields } from '@/utils/defaults.mjs';
 
 const state = {
     id: null,
-    details: {...customerDefaults},
+    details: {...customerFields.basic},
     texts: {},
     loading: false,
 };

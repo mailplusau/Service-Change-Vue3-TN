@@ -2,7 +2,8 @@ import { defineStore } from 'pinia';
 import http from '@/utils/http.mjs';
 import {useCustomerStore} from '@/stores/customer';
 import {useCommRegStore} from '@/stores/comm-reg';
-import {COMM_REG_STATUS, getNextWorkingDate, offsetDateObjectForNSDateField, SERVICE_CHANGE_STATUS, serviceChangeDefaults} from '@/utils/utils.mjs';
+import {getNextWorkingDate, offsetDateObjectForNSDateField} from '@/utils/utils.mjs';
+import {serviceChange as serviceChangeFields, COMM_REG_STATUS, SERVICE_CHANGE_STATUS} from '@/utils/defaults.mjs';
 import {useUserStore} from '@/stores/user';
 import {useMainStore} from '@/stores/main';
 import {useDataStore} from '@/stores/data';
@@ -22,7 +23,7 @@ const state = {
     },
     changeDialog: {
         defaults: {
-            ...serviceChangeDefaults,
+            ...serviceChangeFields,
 
             serviceType: null,
             serviceDescription: ''

@@ -6,7 +6,7 @@
  * @created 04/07/2024
  */
 
-import {commRegDefaults, serviceChangeDefaults, serviceFieldIds, COMM_REG_STATUS, SERVICE_CHANGE_STATUS} from '@/utils/utils.mjs';
+import {serviceChange as serviceChangeFields, commReg as commRegFields, serviceFieldIds, COMM_REG_STATUS, SERVICE_CHANGE_STATUS} from '@/utils/defaults.mjs';
 
 let NS_MODULES = {};
 
@@ -252,7 +252,7 @@ const utils = {
         NS_MODULES.search.create({
             type: 'customrecord_servicechg',
             filters,
-            columns: [...Object.keys(serviceChangeDefaults), ...additionalColumns]
+            columns: [...Object.keys(serviceChangeFields), ...additionalColumns]
         }).run().each(result => this.processSavedSearchResults(data, result));
 
         return data;
@@ -274,7 +274,7 @@ const utils = {
         NS_MODULES.search.create({
             type: 'customrecord_commencement_register',
             filters,
-            columns: [...Object.keys(commRegDefaults), ...additionalColumns]
+            columns: [...Object.keys(commRegFields), ...additionalColumns]
         }).run().each(result => this.processSavedSearchResults(data, result));
 
         return data;
@@ -283,6 +283,7 @@ const utils = {
     processSavedSearchResults(data, result) {
         let obj = {};
 
+        obj['internalid'] = result.id;
         for (let column of result['columns']) {
             let columnName = [...(column.join ? [column.join] : []), column.name].join('.');
             obj[columnName] = result['getValue'](column);

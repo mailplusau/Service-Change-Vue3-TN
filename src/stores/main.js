@@ -38,12 +38,12 @@ const actions = {
 
         await Promise.allSettled([
             useUserStore().init(),
-            useCommRegStore().init(),
             useSalesRecordStore().init(),
             useCustomerStore().init(),
             useDataStore().init(),
         ]);
 
+        await useCommRegStore().init();
         await useServiceStore().init();
 
         _updateFormTitleAndHeader(this);

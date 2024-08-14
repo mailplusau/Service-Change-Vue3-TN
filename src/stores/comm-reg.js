@@ -1,13 +1,15 @@
 import {defineStore} from 'pinia';
-import {commRegDefaults, offsetDateObjectForNSDateField} from '@/utils/utils.mjs';
+import {offsetDateObjectForNSDateField} from '@/utils/utils.mjs';
+import {COMM_REG_STATUS} from '@/utils/defaults.mjs';
 import http from '@/utils/http.mjs';
 import {useSalesRecordStore} from '@/stores/sales-record';
 import {useCustomerStore} from '@/stores/customer';
 import {useGlobalDialog} from '@/stores/global-dialog';
+import {commReg as commRegFields} from '@/utils/defaults.mjs';
 
 const state = {
     id: null,
-    details: {...commRegDefaults},
+    details: {...commRegFields},
     texts: {},
     loading: false,
 };
@@ -47,22 +49,23 @@ const actions = {
 async function _getCommencementRegister(ctx) {
     if (!useCustomerStore().id || !useSalesRecordStore().id) return;
 
-    let fieldIds = [];
-    for (let fieldId in ctx.details) fieldIds.push(fieldId);
-    fieldIds = fieldIds.map(fieldId => (fieldId === 'internalid' && !!ctx.id) ? 'id' : fieldId)
+    if (!ctx.id) { // query and verify that there's a workable Commencement Register associated with the Sales Record
+        const commRegs = await http.get('getCommRegBySalesRecordId', { salesRecordId: useSalesRecordStore().id });
 
-    if (!ctx.id) {
-        const commRegs = await http.get('getCommRegsByCustomerId', { customerId: useCustomerStore().id });
+        if (commRegs.length > 1)
+            return useGlobalDialog().displayError('Error',
+                `There are more than one Commencement Registers associated with Sales Record #${useSalesRecordStore().id}.`, 400, true);
 
-        if (commRegs.length > 1) {
-            useGlobalDialog().displayError('Error', 'There are more than one Commencement Register with the status of either Waiting T&C, In Trial or Scheduled', 500, true);
-            return;
-        } else if (commRegs.length === 1) ctx.id = commRegs[0]['internalid'];
+        if (commRegs.length === 1 && [COMM_REG_STATUS.Quote, COMM_REG_STATUS.Waiting_TNC, COMM_REG_STATUS.Scheduled].includes(parseInt(commRegs[0]['custrecord_trial_status'])))
+            ctx.id = commRegs[0]['internalid'];
+        else if (commRegs.length === 1)
+            return useGlobalDialog().displayError('Error',
+                `This Commencement Register is neither Quote, Scheduled nor Awaiting T&C Agreement.`, 400, true);
     }
 
     if (!ctx.id) return ctx.loading = false;
 
-    let data = await http.get('getCommencementRegister', { commRegId: ctx.id, fieldIds });
+    let data = await http.get('getCommencementRegister', { commRegId: ctx.id, fieldIds: Object.keys(commRegFields) });
 
     for (let fieldId in ctx.details) {
         ctx.details[fieldId] = data[fieldId];
