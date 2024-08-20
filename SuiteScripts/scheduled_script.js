@@ -43,8 +43,6 @@ function _processInTrialCommRegs(context, customersToUpdateFinancialItems) {
         ['custrecord_trial_status', 'is', COMM_REG_STATUS.In_Trial], // Scheduled (9)
         'AND',
         ['custrecord_bill_date', 'on', 'tomorrow'],
-        'AND',
-        ['custrecord_franchisee', 'is', 779884] // TODO: test with franchisee TEST - NSW
     ]).forEach(inTrialCommReg => {
 
         // Make the current In-Trial comm reg Signed (2)
@@ -78,8 +76,6 @@ function _processScheduledCommRegs(context, customersToUpdateFinancialItems, sho
         ['custrecord_trial_status', 'is', COMM_REG_STATUS.Scheduled], // Scheduled (9)
         'AND',
         ['custrecord_comm_date', 'on', 'tomorrow'],
-        'AND',
-        ['custrecord_franchisee', 'is', 779884] // TODO: test with franchisee TEST - NSW
     ]).forEach(scheduledCommReg => { // for each scheduled comm regs
 
         let hasPreviouslySignedCommRegs = false;
@@ -143,8 +139,6 @@ function _findCustomersWithPendingFinancialItems(context, customersToUpdateFinan
         ['custrecord_comm_date', 'within', `1/${today.getMonth() + 1}/${today.getFullYear()}`, `${judgementDay}/${today.getMonth() + 1}/${today.getFullYear()}`],
         'AND',
         ['custrecord_trial_status','anyOf'.toLowerCase(), '2'], // comm reg is Signed (2)
-        'AND',
-        ['custrecord_franchisee', 'anyOf'.toLowerCase(), '779884'] // TODO: test with franchisee TEST - NSW
     ], ['CUSTRECORD_CUSTOMER.entitystatus']).forEach(signedCommReg => {
 
         const changedCommRegs = utils.getCommRegsByFilters([ // get changed comm regs from the associated customer
