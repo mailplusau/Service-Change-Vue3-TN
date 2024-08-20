@@ -8,6 +8,7 @@ import {useCustomerStore} from '@/stores/customer';
 import {useSalesRecordStore} from '@/stores/sales-record';
 import {useServiceStore} from '@/stores/services';
 import {useDataStore} from '@/stores/data';
+import {useFranchiseeStore} from '@/stores/franchisee';
 
 getWindowContext().document.title = `${VARS.pageTitle} - NetSuite Australia (Mail Plus Pty Ltd)`
 
@@ -34,15 +35,16 @@ const getters = {
 
 const actions = {
     async init() {
+        useUserStore().init().then();
         await _readUrlParams(this);
 
         await Promise.allSettled([
-            useUserStore().init(),
             useSalesRecordStore().init(),
             useCustomerStore().init(),
             useDataStore().init(),
         ]);
 
+        useFranchiseeStore().init().then();
         await useCommRegStore().init();
         await useServiceStore().init();
 
@@ -68,19 +70,15 @@ async function _readUrlParams(ctx) {
     let paramCommRegId = (!params['salesrep'] ? weirdParams['commreg'] : params['commreg']) || null;
 
     try {
-        if (!paramCustomerId) {
+        if (!paramCustomerId || !paramSalesRecordId) {
             console.log('Missing parameters')
             useGlobalDialog().displayError('Missing parameters', 'Please check that the url contains all necessary parameters.')
             return;
         }
 
-        let {customerId, salesRecordId, commRegId} = await http.post('verifyParameters', {
-            customerId: paramCustomerId, salesRecordId: paramSalesRecordId, commRegId: paramCommRegId
-        });
-
-        useCommRegStore().id = commRegId;
-        useCustomerStore().id = customerId;
-        useSalesRecordStore().id = salesRecordId;
+        useCommRegStore().id = paramCommRegId;
+        useCustomerStore().id = paramCustomerId;
+        useSalesRecordStore().id = paramSalesRecordId;
         ctx.isAdmin = !!salesRep;
 
         ctx.extraParams.scriptId = (!params['salesrep'] ? weirdParams['customid'] : params['customid']) || null;

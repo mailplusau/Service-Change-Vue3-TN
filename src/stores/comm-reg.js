@@ -6,6 +6,7 @@ import {useSalesRecordStore} from '@/stores/sales-record';
 import {useCustomerStore} from '@/stores/customer';
 import {useGlobalDialog} from '@/stores/global-dialog';
 import {commReg as commRegFields} from '@/utils/defaults.mjs';
+import {useFranchiseeStore} from '@/stores/franchisee';
 
 const state = {
     id: null,
@@ -30,16 +31,22 @@ const actions = {
         if (this.id || !useCustomerStore().id || !useSalesRecordStore().id) return;
         this.loading = true;
 
-        this.id = await http.post('createCommencementRegister', {
-            customerId: useCustomerStore().id,
-            salesRecordId: useSalesRecordStore().id,
-            saleTypeId,
-            commRegStatus,
-            commencementDate,
-            trialEndDate,
-            billingStartDate,
-            signupDate: offsetDateObjectForNSDateField(new Date()),
-        });
+        let commRegData = {...this.details};
+        commRegData['custrecord_customer'] = useCustomerStore().id;
+        commRegData['custrecord_commreg_sales_record'] = useSalesRecordStore().id;
+        commRegData['custrecord_salesrep'] = useSalesRecordStore().details.custrecord_sales_assigned;
+
+        commRegData['custrecord_sale_type'] = saleTypeId;
+        commRegData['custrecord_state'] = useFranchiseeStore().details.location;
+        commRegData['custrecord_franchisee'] = useFranchiseeStore().id;
+        commRegData['custrecord_comm_date'] = commencementDate;
+        commRegData['custrecord_trial_status'] = commRegStatus;
+        commRegData['custrecord_trial_expiry'] = trialEndDate;
+        commRegData['custrecord_bill_date'] = billingStartDate;
+        commRegData['custrecord_date_entry'] = offsetDateObjectForNSDateField(new Date());
+        commRegData['custrecord_comm_date_signup'] = offsetDateObjectForNSDateField(new Date());
+
+        this.id = await http.post('createCommencementRegister', {commRegData});
 
         await _getCommencementRegister(this);
         this.loading = false;

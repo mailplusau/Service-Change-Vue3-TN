@@ -6,6 +6,8 @@ import {salesRecord as salesRecordFields} from '@/utils/defaults.mjs';
 
 const state = {
     id: null,
+    details: {...salesRecordFields},
+    texts: {},
 };
 
 const getters = {

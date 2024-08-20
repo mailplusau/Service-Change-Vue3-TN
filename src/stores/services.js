@@ -44,11 +44,13 @@ state.changeDialog.form = {...state.changeDialog.defaults};
 // state.changes.all = [...serviceChanges]
 
 const getters = {
+    hasActiveService : state => state.data.all.findIndex(item => !item.isinactive) >= 0,
+
     serviceMarkedForCancellation : state => serviceId => {
         let serviceChange = _findServiceChangeByServiceId(state, serviceId);
 
         return !!serviceChange && serviceChange?.custrecord_servicechg_date_ceased
-    }
+    },
 };
 
 const actions = {
@@ -188,12 +190,13 @@ async function _saveServiceChange(ctx) {
     let isQuote = useCustomerStore().status !== 13 && (!useMainStore().extraParams.closedWon && !useMainStore().extraParams.freeTrial);
 
     if (!useCommRegStore().id) { // create a comm reg
-        let saleTypeId = useDataStore().serviceChangeTypes.filter(item => item.title.toLowerCase() === (useCustomerStore().isSigned ? 'change of service' : 'new customer'))?.[0]?.value || 24;
+        let saleTypeId = useDataStore().serviceChangeTypes.filter(item => item.title.toLowerCase() === (ctx.hasActiveService ? 'change of service' : 'new customer'))?.[0]?.value || 24;
 
         await useCommRegStore().createNewCommReg(
             saleTypeId,
             isQuote ? COMM_REG_STATUS.Quote : COMM_REG_STATUS.Waiting_TNC,
-            offsetDateObjectForNSDateField(ctx.globalEffectiveDate), offsetDateObjectForNSDateField(ctx.globalTrialEndDate),
+            offsetDateObjectForNSDateField(ctx.globalEffectiveDate),
+            offsetDateObjectForNSDateField(ctx.globalTrialEndDate) || '',
             offsetDateObjectForNSDateField(getNextWorkingDate(ctx.globalTrialEndDate)) || '');
 
     }
@@ -234,7 +237,7 @@ async function _saveServiceChange(ctx) {
 function _prepareServiceChangeForm(ctx, serviceId = null) {
     ctx.changeDialog.form = {
         ...ctx.changeDialog.defaults,
-        custrecord_servicechg_type: useCustomerStore().status !== 13 ? 'New Customer' : 'Extra Service', // anything not Signed (13)
+        custrecord_servicechg_type: ctx.hasActiveService ? 'Extra Service' : 'New Customer', // Extra Service if customer already has active services
     };
 
     if (serviceId) {

@@ -265,6 +265,25 @@ const getOperations = {
     'getScriptUrl' : function (response, {scriptId, deploymentId, params, returnExternalUrl = false}) {
         _writeResponseJson(response, NS_MODULES.url['resolveScript']({scriptId, deploymentId, params, returnExternalUrl}));
     },
+    'getFranchiseeOfCustomer' : function (response, {customerId, fieldIds}) {
+        let partner = {};
+        try {
+            let result = NS_MODULES.search['lookupFields']({
+                type: 'customer',
+                id: customerId,
+                columns: ['partner']
+            });
+            let partnerRecord = NS_MODULES.record.load({type: 'partner', id: result.partner ? result.partner[0].value : ''})
+            for (let fieldId of fieldIds) {
+                partner[fieldId] = partnerRecord['getValue']({fieldId});
+                partner[fieldId + '_text'] = partnerRecord['getText']({fieldId});
+            }
+
+        } catch (e) {
+            //
+        }
+        _writeResponseJson(response, partner);
+    },
 }
 
 const postOperations = {
@@ -344,7 +363,6 @@ const postOperations = {
         let needInactiveBypass = false;
 
         // Save the service change record
-        let serviceChangeFields = {...serviceChangeFields};
         let serviceChangeRecord = serviceChangeData.internalid ?
             record.load({type: 'customrecord_servicechg', id: serviceChangeData.internalid, isDynamic: true}) :
             record.create({type: 'customrecord_servicechg', isDynamic: true});
@@ -371,37 +389,18 @@ const postOperations = {
 
         _writeResponseJson(response, serviceChangeId);
     },
-    'createCommencementRegister' : function(response, {customerId, salesRecordId, saleTypeId, commRegStatus, commencementDate, trialEndDate, billingStartDate, signupDate}) {
-        let {record, runtime} = NS_MODULES;
-        let userId = runtime['getCurrentUser']().id;
-        let userRole = runtime['getCurrentUser']().role;
-        let customerRecord = record.load({type: 'customer', id: customerId});
-        let partnerId = parseInt(customerRecord.getValue({fieldId: 'partner'}));
-        let partnerRecord = record.load({type: 'partner', id: partnerId});
-        let state = partnerRecord.getValue({fieldId: 'location'});
+    'createCommencementRegister' : function(response, {commRegData}) {
+        let {record} = NS_MODULES;
 
         let commRegRecord = record.create({type: 'customrecord_commencement_register'});
 
-        commRegRecord.setValue({fieldId: 'custrecord_date_entry', value: new Date(signupDate)});
-        commRegRecord.setValue({fieldId: 'custrecord_comm_date', value: new Date(commencementDate)});
-        commRegRecord.setValue({fieldId: 'custrecord_comm_date_signup', value: new Date(signupDate)});
-        commRegRecord.setValue({fieldId: 'custrecord_customer', value: customerId});
-        commRegRecord.setValue({fieldId: 'custrecord_salesrep', value: userId});
-        commRegRecord.setValue({fieldId: 'custrecord_std_equiv', value: 1}); // Standard Equivalent
-        commRegRecord.setValue({fieldId: 'custrecord_wkly_svcs', value: '5'}); // Weekly Services
-        commRegRecord.setValue({fieldId: 'custrecord_in_out', value: 2}); // Inbound
-        commRegRecord.setValue({fieldId: 'custrecord_state', value: state});
-        commRegRecord.setValue({fieldId: 'custrecord_trial_status', value: commRegStatus});
-        commRegRecord.setValue({fieldId: 'custrecord_sale_type', value: saleTypeId});
+        for (let fieldId in commRegData) {
+            let value = commRegData[fieldId];
+            if (isoStringRegex.test(commRegData[fieldId]) && ['date', 'datetimetz'].includes(commRegRecord['getField']({fieldId})?.type))
+                value = new Date(commRegData[fieldId]);
 
-        if (trialEndDate && isoStringRegex.test(trialEndDate))
-            commRegRecord.setValue({fieldId: 'custrecord_trial_expiry', value: new Date(trialEndDate)});
-
-        if (billingStartDate && isoStringRegex.test(billingStartDate))
-            commRegRecord.setValue({fieldId: 'custrecord_bill_date', value: new Date(billingStartDate)});
-
-        if (userRole !== 1000) commRegRecord.setValue({fieldId: 'custrecord_franchisee', value: partnerId});
-        if (salesRecordId) commRegRecord.setValue({fieldId: 'custrecord_commreg_sales_record', value: salesRecordId});
+            commRegRecord.setValue({fieldId, value});
+        }
 
         let commRegId = commRegRecord.save({ignoreMandatoryFields: true});
 
