@@ -40,7 +40,7 @@ define(moduleNames.map(item => 'N/' + item), (...args) => {
 
 function _processInTrialCommRegs(context, customersToUpdateFinancialItems) {
     utils.getCommRegsByFilters([ // get all In Trial comm regs with billing date being tomorrow
-        ['custrecord_trial_status', 'is', COMM_REG_STATUS.In_Trial], // Scheduled (9)
+        ['custrecord_trial_status', 'anyOf'.toLowerCase(), COMM_REG_STATUS.In_Trial], // Scheduled (9)
         'AND',
         ['custrecord_bill_date', 'on', 'tomorrow'],
     ]).forEach(inTrialCommReg => {
@@ -72,10 +72,12 @@ function _processInTrialCommRegs(context, customersToUpdateFinancialItems) {
 }
 
 function _processScheduledCommRegs(context, customersToUpdateFinancialItems, shouldUpdateFinancialItems) {
-    utils.getCommRegsByFilters([ // get all scheduled comm regs with effective date being tomorrow
-        ['custrecord_trial_status', 'is', COMM_REG_STATUS.Scheduled], // Scheduled (9)
+    utils.getCommRegsByFilters([ // get all scheduled comm regs with effective date on or before tomorrow that has T&C Agreement
+        ['custrecord_trial_status', 'anyOf'.toLowerCase(), COMM_REG_STATUS.Scheduled], // Scheduled (9)
         'AND',
-        ['custrecord_comm_date', 'on', 'tomorrow'],
+        ['custrecord_comm_date', 'onOrBefore'.toLowerCase(), 'tomorrow'],
+        'AND',
+        ['custrecord_tnc_agreement_date', 'isNotEmpty'.toLowerCase(), '']
     ]).forEach(scheduledCommReg => { // for each scheduled comm regs
 
         let hasPreviouslySignedCommRegs = false;
@@ -104,7 +106,7 @@ function _processScheduledCommRegs(context, customersToUpdateFinancialItems, sho
 
         // Find all service changes of Scheduled Comm Regs and execute them
         utils.getServiceChangesByFilters([
-            ['custrecord_servicechg_status', 'is', SERVICE_CHANGE_STATUS.Scheduled], // Scheduled (1)
+            ['custrecord_servicechg_status', 'anyOf'.toLowerCase(), SERVICE_CHANGE_STATUS.Scheduled, SERVICE_CHANGE_STATUS.Quote], // Scheduled (1) or Quote (4)
             'AND',
             ['custrecord_servicechg_comm_reg', 'is', scheduledCommReg['internalid']]
         ]).forEach(scheduledServiceChange => {
@@ -138,7 +140,7 @@ function _findCustomersWithPendingFinancialItems(context, customersToUpdateFinan
         'AND',
         ['custrecord_comm_date', 'within', `1/${today.getMonth() + 1}/${today.getFullYear()}`, `${judgementDay}/${today.getMonth() + 1}/${today.getFullYear()}`],
         'AND',
-        ['custrecord_trial_status','anyOf'.toLowerCase(), '2'], // comm reg is Signed (2)
+        ['custrecord_trial_status','anyOf'.toLowerCase(), COMM_REG_STATUS.Signed], // comm reg is Signed (2)
     ], ['CUSTRECORD_CUSTOMER.entitystatus']).forEach(signedCommReg => {
 
         const changedCommRegs = utils.getCommRegsByFilters([ // get changed comm regs from the associated customer
@@ -147,7 +149,7 @@ function _findCustomersWithPendingFinancialItems(context, customersToUpdateFinan
             ['custrecord_customer', 'is', signedCommReg['custrecord_customer']]
         ]);
 
-        if (changedCommRegs.length) // if this customer has other comm regs with Changed () status, we add it to the to-update list
+        if (changedCommRegs.length) // if this customer has other comm regs with Changed (7) status, we add it to the to-update list
             customersToUpdateFinancialItems.push(signedCommReg['custrecord_customer']);
     });
 }
@@ -210,11 +212,11 @@ function _reportFinancialItemsChanges(today, financialItemsReports = []) {
     for (let report of financialItemsReports) {
         const customerRecord = NS_MODULES.record.load({type: 'customer', id: report.customer.id});
         let pricingNotes = `${today.getDate()}/${today.getMonth() + 1}/${today.getFullYear()}\n`;
-        content += `<tr><td colspan="3"><b>${report.customer.entityId} ${report.customer.companyName} (ID: ${report.customer.id})</b></td></tr>`;
+        content += `<tr><td colspan="3"><b><u>${report.customer.entityId} ${report.customer.companyName} (ID: ${report.customer.id})</u></b></td></tr>`;
 
         for (let service of report.services) {
-            pricingNotes += ` ${service.name} - @$${service.price} - ${service.frequency}\n`;
-            content += `<tr><td>${service.name}</td><td>Price: $${service.price}</td><td>Frequency: ${service.frequency}</td></tr>`;
+            pricingNotes += ` ${service.name} - @$${_formatCurrency(service.price)} - ${service.frequency}\n`;
+            content += `<tr><td>${service.name}</td><td>Price: $${_formatCurrency(service.price)}</td><td>Frequency: ${service.frequency}</td></tr>`;
         }
 
         pricingNotes = pricingNotes + '\n' + customerRecord.getValue({fieldId: 'custentity_customer_pricing_notes'});
@@ -234,6 +236,8 @@ function _reportFinancialItemsChanges(today, financialItemsReports = []) {
         recipients: [
             import.meta.env.VITE_NS_USER_1732844_EMAIL,
             import.meta.env.VITE_NS_USER_409635_EMAIL,
+            import.meta.env.VITE_NS_USER_1552795_EMAIL,
+            import.meta.env.VITE_NS_USER_772595_EMAIL,
         ],
         isInternalOnly: true
     })
@@ -324,4 +328,9 @@ const utils = {
             isInternalOnly: true
         });
     }
+}
+
+function _formatCurrency(price) {
+    let formatted = parseFloat(price).toFixed(2);
+    return formatted === 'NaN' ? price : '$' + formatted;
 }
