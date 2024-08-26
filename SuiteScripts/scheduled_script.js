@@ -185,12 +185,14 @@ function _updateFinancialItemsOfCustomer(customerIds, financialItemsReports) {
                 customerRecord['setCurrentSublistValue']({sublistId, fieldId: 'level', value: -1});
                 customerRecord['setCurrentSublistValue']({sublistId, fieldId: 'price', value: service['custrecord_service_price']});
 
+                let freqArray = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Adhoc']
+                    .map((item, index) => service['custrecord_service_day_' + item.toLowerCase()] ? item : null)
+                    .filter(item => item);
+
                 report.services.push({
                     name: service['custrecord_service_text'],
                     price: service['custrecord_service_price'],
-                    frequency: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Adhoc']
-                        .map((item, index) => service['custrecord_service_day_' + item.toLowerCase()] ? item : null)
-                        .filter(item => item).join(', ')
+                    frequency: freqArray.length ? freqArray.join(', ') : '[Not specified]'
                 })
 
                 customerRecord['commitLine']({sublistId});
@@ -215,8 +217,8 @@ function _reportFinancialItemsChanges(today, financialItemsReports = []) {
         content += `<tr><td colspan="3"><b><u>${report.customer.entityId} ${report.customer.companyName} (ID: ${report.customer.id})</u></b></td></tr>`;
 
         for (let service of report.services) {
-            pricingNotes += ` ${service.name} - @$${_formatCurrency(service.price)} - ${service.frequency}\n`;
-            content += `<tr><td>${service.name}</td><td>Price: $${_formatCurrency(service.price)}</td><td>Frequency: ${service.frequency}</td></tr>`;
+            pricingNotes += ` ${service.name} - @${_formatCurrency(service.price)} - ${service.frequency}\n`;
+            content += `<tr><td>${service.name}</td><td>Price: ${_formatCurrency(service.price)}</td><td>Frequency: ${service.frequency}</td></tr>`;
         }
 
         pricingNotes = pricingNotes + '\n' + customerRecord.getValue({fieldId: 'custentity_customer_pricing_notes'});
