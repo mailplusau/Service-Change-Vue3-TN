@@ -185,14 +185,17 @@ function _updateFinancialItemsOfCustomer(customerIds, financialItemsReports) {
                 customerRecord['setCurrentSublistValue']({sublistId, fieldId: 'level', value: -1});
                 customerRecord['setCurrentSublistValue']({sublistId, fieldId: 'price', value: service['custrecord_service_price']});
 
+                const freqShorthands = ['M', 'T', 'W', 'Th', 'F', 'Adhoc'];
                 let freqArray = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Adhoc']
-                    .map((item, index) => service['custrecord_service_day_' + item.toLowerCase()] ? item : null)
+                    .map((item, index) => service['custrecord_service_day_' + item.toLowerCase()] ? freqShorthands[index] : null)
                     .filter(item => item);
+
+                const freqString = freqArray.join('');
 
                 report.services.push({
                     name: service['custrecord_service_text'],
                     price: service['custrecord_service_price'],
-                    frequency: freqArray.length ? freqArray.join(', ') : '[Not specified]'
+                    frequency: freqArray.length ? (freqString === 'MTWThF' ? 'Daily' : freqString) : 'Adhoc'
                 })
 
                 customerRecord['commitLine']({sublistId});
@@ -207,29 +210,29 @@ function _updateFinancialItemsOfCustomer(customerIds, financialItemsReports) {
 }
 
 function _reportFinancialItemsChanges(today, financialItemsReports = []) {
-    let content = '';
+    let emailContent = '';
     let emailHtml = `<h3>Report for effective date: ${today.getDate()}/${today.getMonth() + 1}/${today.getFullYear()}</h3>`;
     emailHtml += financialItemsReports.length ? `<p>The following customers have had their Financial Items updated:</p>` : '<p>No update to financial items of any customer.</p>';
 
     for (let report of financialItemsReports) {
         const customerRecord = NS_MODULES.record.load({type: 'customer', id: report.customer.id});
         let pricingNotes = `${today.getDate()}/${today.getMonth() + 1}/${today.getFullYear()}\n`;
-        content += `<tr><td colspan="3"><b><u>${report.customer.entityId} ${report.customer.companyName} (ID: ${report.customer.id})</u></b></td></tr>`;
+        emailContent += `<tr><td colspan="3"><b><u>${report.customer.entityId} ${report.customer.companyName} (ID: ${report.customer.id})</u></b></td></tr>`;
 
         for (let service of report.services) {
             pricingNotes += ` ${service.name} - @${_formatCurrency(service.price)} - ${service.frequency}\n`;
-            content += `<tr><td>${service.name}</td><td>Price: ${_formatCurrency(service.price)}</td><td>Frequency: ${service.frequency}</td></tr>`;
+            emailContent += `<tr><td>${service.name}</td><td>Price: ${_formatCurrency(service.price)}</td><td>Frequency: ${service.frequency}</td></tr>`;
         }
 
         pricingNotes = pricingNotes + '\n' + customerRecord.getValue({fieldId: 'custentity_customer_pricing_notes'});
-        content += `<tr><td colspan="3"><br></td></tr>`;
+        emailContent += `<tr><td colspan="3"><br></td></tr>`;
 
         try {
             NS_MODULES.record['submitFields']({type: 'customer', id: report.customer.id, values: {'custentity_customer_pricing_notes': pricingNotes}});
         } catch (e) { utils.handleError(e, `Failed to save Price Notes for customer ID ${report.customer.id}<br>Price Notes: ${pricingNotes}`) }
     }
 
-    emailHtml += `<table>${content}</table>`
+    emailHtml += `<table>${emailContent}</table>`
 
     NS_MODULES.email.send({
         author: 112209,
