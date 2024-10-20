@@ -10,7 +10,7 @@ import {serviceChange as serviceChangeFields, commReg as commRegFields, serviceF
 
 let NS_MODULES = {};
 
-const moduleNames = ['render', 'file', 'runtime', 'search', 'record', 'url', 'format', 'email', 'task', 'log'];
+const moduleNames = ['render', 'file', 'runtime', 'search', 'record', 'url', 'format', 'email', 'task', 'log', 'https'];
 
 // eslint-disable-next-line no-undef
 define(moduleNames.map(item => 'N/' + item), (...args) => {
@@ -77,7 +77,9 @@ function _processScheduledCommRegs(context, customersToUpdateFinancialItems, sho
         'AND',
         ['custrecord_comm_date', 'onOrBefore'.toLowerCase(), 'tomorrow'],
         'AND',
-        ['custrecord_tnc_agreement_date', 'isNotEmpty'.toLowerCase(), '']
+        ['custrecord_tnc_agreement_date', 'isNotEmpty'.toLowerCase(), ''],
+        'AND',
+        ['custrecord_customer.entitystatus', 'anyOf'.toLowerCase(), [13, 32, 71, 66]], // Signed (13), Free Trial (32), Free Trial - Pending (71) and To be Finalised (66)
     ]).forEach(scheduledCommReg => { // for each scheduled comm regs
 
         let hasPreviouslySignedCommRegs = false;
@@ -97,6 +99,8 @@ function _processScheduledCommRegs(context, customersToUpdateFinancialItems, sho
             });
             hasPreviouslySignedCommRegs = true;
         });
+
+        _informFranchiseeOfFreeTrialCustomer(scheduledCommReg);
 
         // Make the current Scheduled comm reg In Trial (1) or Signed (2)
         NS_MODULES.record['submitFields']({
@@ -246,6 +250,88 @@ function _reportFinancialItemsChanges(today, financialItemsReports = []) {
         ],
         isInternalOnly: true
     })
+}
+
+function _informFranchiseeOfFreeTrialCustomer(scheduledCommReg) {
+    if (!scheduledCommReg['custrecord_trial_expiry']) return; // only run if free trial
+
+    try {
+        let {search, record, https, url, email, format, file} = NS_MODULES;
+        let commReg = record.load({type: 'customrecord_commencement_register', id: scheduledCommReg['internalid']});
+        let salesRecord = record.load({type: 'customrecord_sales', id: scheduledCommReg['custrecord_commreg_sales_record']});
+        let salesRecordValues = search['lookupFields']({
+            type: 'customrecord_sales',
+            id: scheduledCommReg['custrecord_commreg_sales_record'],
+            columns: ['custrecord_sales_campaign', 'custrecord_sales_assigned.internalid', 'custrecord_sales_assigned.email']
+        })
+        let customerId = scheduledCommReg['custrecord_customer'];
+        let attachments = [];
+        let franchiseeEmail = search['lookupFields']({
+            type: 'customer',
+            id: customerId,
+            columns: ['partner.email']
+        })['partner.email'];
+        let billingStartDate = null;
+        let trialExpiryDate = commReg.getValue({fieldId: 'custrecord_trial_expiry'});
+
+        if (trialExpiryDate) {
+            billingStartDate = new Date(trialExpiryDate.toISOString());
+            billingStartDate.setDate(billingStartDate.getDate() + 1);
+        }
+
+        if (scheduledCommReg['custrecord_scand_form']) attachments.push(file.load({id: scheduledCommReg['custrecord_scand_form']}))
+
+        search.create({
+            type: "contact",
+            filters:
+                [
+                    ["isinactive", "is", "F"], 'AND',
+                    ["company", "is", customerId], 'AND',
+                    ['email', 'isnotempty', '']
+                ],
+            columns: ['internalid']
+        }).run().each(resultSet => {
+            // LPO Campaign (69)
+            let templateId = parseInt(salesRecordValues['custrecord_sales_campaign'][0]['value']) === 69 ? 201 : 150;
+            let emailTemplateRecord = record.load({type: 'customrecord_camp_comm_template', id: templateId})
+            let httpsGetResult = https.get({url: url.format({
+                    domain: 'https://1048144.extforms.netsuite.com/app/site/hosting/scriptlet.nl',
+                    params: {
+                        script: 395,
+                        deploy: 1,
+                        compid: 1048144,
+                        'ns-at': 'AAEJ7tMQgAVHkxJsbXgGwQQm4xn968o7JJ9-Ym7oanOzCSkWO78',
+                        rectype: 'customer',
+                        template: templateId,
+                        recid: customerId,
+                        salesrep: salesRecord?.getValue({fieldId: 'custrecord_sales_assigned'}),
+                        dear: null,
+                        contactid: resultSet['id'],
+                        userid: salesRecordValues['custrecord_sales_assigned.internalid'][0]['value'],
+                        commdate: format.format({type: 'date', value: commReg.getValue({fieldId: 'custrecord_comm_date'})}),
+                        commreg: commReg.getValue({fieldId: 'internalid'}),
+                        trialenddate: trialExpiryDate ? format.format({type: 'date', value: commReg.getValue({fieldId: 'custrecord_trial_expiry'})}) : '',
+                        billingstartdate: billingStartDate ? format.format({type: 'date', value: billingStartDate}) : '',
+                    }
+                })});
+            let emailHtml = httpsGetResult.body;
+
+            email.send({
+                author: salesRecordValues['custrecord_sales_assigned.internalid'][0]['value'],
+                subject: emailTemplateRecord.getValue({fieldId: 'custrecord_camp_comm_subject'}),
+                body: emailHtml,
+                recipients: [franchiseeEmail],
+                cc: [
+                    salesRecordValues['custrecord_sales_assigned.email'],
+                    ...(parseInt(salesRecordValues['custrecord_sales_campaign'][0]['value']) === 69 ? ['kerry.oneill@mailplus.com.au'] : [])
+                ],
+                bcc: ['tim.nguyen@mailplus.com.au'],
+                attachments,
+                relatedRecords: {'entityId': customerId},
+                isInternalOnly: true
+            });
+        })
+    } catch (e) { utils.handleError(e); }
 }
 
 const utils = {
