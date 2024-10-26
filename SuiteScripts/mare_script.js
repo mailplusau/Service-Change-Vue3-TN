@@ -22,7 +22,6 @@ define(moduleNames.map(item => 'N/' + item), (...args) => {
 
 
     function getInputData() {
-        // approximate Australian/Sydney local time (not accounted for DST so DO NOT use within 2 hours before or after midnight of local time)
         const judgementDay = 15;
         const today = utils.getToday();
         const shouldUpdateFinancialItems = today.getDate() >= judgementDay;
@@ -56,50 +55,15 @@ define(moduleNames.map(item => 'N/' + item), (...args) => {
         return tasks;
     }
 
-    function map(ctx) { // pass through all key-value pairs, pre-process scheduled and in-trial comm regs to find if customer's financial items need updating
-        const value = JSON.parse(ctx.value);
-
-        if (ctx.key.includes('ScheduledCommReg')) {
-            const scheduledCommReg = value['scheduledCommReg']
-            let isFreeTrial = !!scheduledCommReg['custrecord_trial_expiry'];
-            let shouldUpdateFinancialItems = value['shouldUpdateFinancialItems'];
-            let hasPreviouslySignedCommRegs;
-
-            // Find all Signed comm reg of the customer that the scheduled comm reg is associated to apply Changed (7) status to them
-            const signedCommRegs = utils.getCommRegsByFilters([
-                ['custrecord_trial_status', 'anyof', COMM_REG_STATUS.Signed, COMM_REG_STATUS.Changed],
-                'AND',
-                ['custrecord_customer', 'is', scheduledCommReg['custrecord_customer']]
-            ]);
-            hasPreviouslySignedCommRegs = !!signedCommRegs.length;
-
-            if (isFreeTrial || !hasPreviouslySignedCommRegs || (hasPreviouslySignedCommRegs && shouldUpdateFinancialItems))
-                ctx.write({key: 'PendingCustomer_' + scheduledCommReg['custrecord_customer'], value: {
-                    customerToUpdateFinancialItems: scheduledCommReg['custrecord_customer'],
-                    shouldUpdateFinancialItems: value['shouldUpdateFinancialItems']
-                }});
-        } else if (ctx.key.includes('InTrialCommReg')) {
-            const inTrialCommReg = value['InTrialCommReg']
-            ctx.write({key: 'PendingCustomer_' + inTrialCommReg['custrecord_customer'], value: {
-                    customerToUpdateFinancialItems: inTrialCommReg['custrecord_customer'],
-                    shouldUpdateFinancialItems: value['shouldUpdateFinancialItems']
-                }});
-        }
-
-        ctx.write({key: ctx.key, value: ctx.value});
-    }
-
     function reduce(ctx) {
+        NS_MODULES.log.debug('reduce', `key: ${ctx.key} | value: ${ctx.values}`);
         const value = JSON.parse(ctx.values);
 
         if (ctx.key.includes('ScheduledCommReg')) {
-            NS_MODULES.log.debug('reduce', `process ScheduledCommReg | key: ${ctx.key} | value: ${ctx.values}`);
-            _.processScheduledCommReg(value['scheduledCommReg'])
+            _.processScheduledCommReg(ctx, value['scheduledCommReg'], value['shouldUpdateFinancialItems'])
         } else if (ctx.key.includes('InTrialCommReg')) {
-            NS_MODULES.log.debug('reduce', `process InTrialCommReg | key: ${ctx.key} | value: ${ctx.values}`);
-            _.processInTrialCommReg(value['inTrialCommReg'])
+            _.processInTrialCommReg(ctx, value['inTrialCommReg'])
         } else if (ctx.key.includes('PendingCustomer')) {
-            NS_MODULES.log.debug('reduce', `process PendingCustomer | key: ${ctx.key} | value: ${ctx.values}`);
             _.processPendingCustomer(value['customerToUpdateFinancialItems'], ctx)
         }
     }
@@ -113,7 +77,6 @@ define(moduleNames.map(item => 'N/' + item), (...args) => {
 
     return {
         getInputData,
-        map,
         reduce,
         summarize
     };
@@ -243,7 +206,7 @@ const _ = {
         return customerIds;
     },
 
-    processScheduledCommReg(scheduledCommReg) {
+    processScheduledCommReg(ctx, scheduledCommReg, shouldUpdateFinancialItems) {
         let isFreeTrial = !!scheduledCommReg['custrecord_trial_expiry'];
 
         // Find all Signed comm reg of the customer that the scheduled comm reg is associated to apply Changed (7) status to them
@@ -289,8 +252,21 @@ const _ = {
             // Apply service change to the associated service
             this.applyServiceChange(scheduledServiceChange, isFreeTrial)
         });
+
+        let hasPreviouslySignedCommRegs;
+
+        // Find all Signed comm reg of the customer that the scheduled comm reg is associated to apply Changed (7) status to them
+        const signedCommRegs = utils.getCommRegsByFilters([
+            ['custrecord_trial_status', 'anyof', COMM_REG_STATUS.Signed, COMM_REG_STATUS.Changed],
+            'AND',
+            ['custrecord_customer', 'is', scheduledCommReg['custrecord_customer']]
+        ]);
+        hasPreviouslySignedCommRegs = !!signedCommRegs.length;
+
+        if (isFreeTrial || !hasPreviouslySignedCommRegs || (hasPreviouslySignedCommRegs && shouldUpdateFinancialItems))
+            this.processPendingCustomer(scheduledCommReg['custrecord_customer'], ctx)
     },
-    processInTrialCommReg(inTrialCommReg) {
+    processInTrialCommReg(ctx, inTrialCommReg) {
         // Find all service changes of In-Trial Comm Regs and apply the correct price
         utils.getServiceChangesByFilters([ // get active service changes
             ['custrecord_servicechg_status', 'is', SERVICE_CHANGE_STATUS.Active], // Active (2)
@@ -312,6 +288,8 @@ const _ = {
             type: 'customrecord_commencement_register', id: inTrialCommReg['internalid'],
             values: { custrecord_trial_status: COMM_REG_STATUS.Signed, }
         });
+
+        this.processPendingCustomer(inTrialCommReg['custrecord_customer'], ctx)
     },
     processPendingCustomer(customerId, ctx) {
         const customerRecord = NS_MODULES.record.load({type: 'customer', id: customerId, isDynamic: true});
@@ -343,17 +321,16 @@ const _ = {
             customerRecord['setCurrentSublistValue']({sublistId, fieldId: 'price', value: service['custrecord_service_price']});
             customerRecord['setCurrentSublistValue']({sublistId, fieldId: 'item', value: service['custrecord_service_ns_item']});
 
-            const freqShorthands = ['M', 'T', 'W', 'Th', 'F', 'Adhoc'];
             let freqArray = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Adhoc']
-                .map((item, index) => service['custrecord_service_day_' + item.toLowerCase()] ? freqShorthands[index] : null)
+                .map((item, index) => service['custrecord_service_day_' + item.toLowerCase()] ? item : null)
                 .filter(item => item);
 
-            const freqString = freqArray.join('');
+            const freqString = freqArray.length ? (freqArray.length === 5 ? 'Daily' : freqArray.join(', ')) : 'Adhoc';
 
             report.services.push({
                 price: service['custrecord_service_price'],
                 name: service['custrecord_service_text'],
-                frequency: freqArray.length ? (freqString === 'MTWThF' ? 'Daily' : freqString) : 'Adhoc'
+                frequency: freqString
             })
 
             customerRecord['commitLine']({sublistId});
