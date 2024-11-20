@@ -208,6 +208,7 @@ const _ = {
 
     processScheduledCommReg(ctx, scheduledCommReg, shouldUpdateFinancialItems) {
         let isFreeTrial = !!scheduledCommReg['custrecord_trial_expiry'];
+        let hasPreviouslySignedCommRegs;
 
         // Find all Signed comm reg of the customer that the scheduled comm reg is associated to apply Changed (7) status to them
         utils.getCommRegsByFilters([
@@ -220,6 +221,7 @@ const _ = {
                 type: 'customrecord_commencement_register', id: signedOrChangedCommReg['internalid'],
                 values: { custrecord_trial_status: COMM_REG_STATUS.Changed, }
             });
+            hasPreviouslySignedCommRegs = true;
         });
 
         this.informFranchiseeOfFreeTrialCustomer(scheduledCommReg);
@@ -252,16 +254,6 @@ const _ = {
             // Apply service change to the associated service
             this.applyServiceChange(scheduledServiceChange, isFreeTrial)
         });
-
-        let hasPreviouslySignedCommRegs;
-
-        // Find all Signed comm reg of the customer that the scheduled comm reg is associated to apply Changed (7) status to them
-        const signedCommRegs = utils.getCommRegsByFilters([
-            ['custrecord_trial_status', 'anyof', COMM_REG_STATUS.Signed, COMM_REG_STATUS.Changed],
-            'AND',
-            ['custrecord_customer', 'is', scheduledCommReg['custrecord_customer']]
-        ]);
-        hasPreviouslySignedCommRegs = !!signedCommRegs.length;
 
         if (isFreeTrial || !hasPreviouslySignedCommRegs || (hasPreviouslySignedCommRegs && shouldUpdateFinancialItems))
             this.processPendingCustomer(scheduledCommReg['custrecord_customer'], ctx)
@@ -322,7 +314,7 @@ const _ = {
             customerRecord['setCurrentSublistValue']({sublistId, fieldId: 'item', value: service['custrecord_service_ns_item']});
 
             let freqArray = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Adhoc']
-                .map((item, index) => service['custrecord_service_day_' + item.toLowerCase()] ? item : null)
+                .map(item => service['custrecord_service_day_' + item.toLowerCase()] ? item : null)
                 .filter(item => item);
 
             const freqString = freqArray.length ? (freqArray.length === 5 ? 'Daily' : freqArray.join(', ')) : 'Adhoc';
