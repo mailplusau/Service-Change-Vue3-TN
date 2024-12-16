@@ -6,7 +6,7 @@
  * @created 17/06/2024
  */
 
-import {serviceChange as serviceChangeFields, commReg as commRegFields, salesRecord as salesRecordFields, serviceFieldIds} from '@/utils/defaults.mjs';
+import {serviceChange as serviceChangeFields, commReg as commRegFields, salesRecord as salesRecordFields, franchisee as franchiseeDetails, serviceFieldIds} from '@/utils/defaults.mjs';
 import {VARS} from '@/utils/utils.mjs';
 
 // These variables will be injected during upload. These can be changed under 'netsuite' of package.json
@@ -14,7 +14,7 @@ let htmlTemplateFilename/**/;
 let clientScriptFilename/**/;
 
 const defaultTitle = VARS.pageTitle;
-const isoStringRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}$/; // ISO string without the timezone indicator (Z)
+const isoStringRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z?$/; // ISO string without the timezone indicator (Z)
 
 let NS_MODULES = {};
 
@@ -156,6 +156,10 @@ function _writeResponseJson(response, body) {
 }
 
 const getOperations = {
+    'testLaunchScheduledScript' : function (response) {
+
+        _writeResponseJson(response, `cc:`)
+    },
     'getCurrentUserDetails' : function (response) {
         _writeResponseJson(response, {
             id: NS_MODULES.runtime['getCurrentUser']().id,
@@ -265,7 +269,7 @@ const getOperations = {
     'getScriptUrl' : function (response, {scriptId, deploymentId, params, returnExternalUrl = false}) {
         _writeResponseJson(response, NS_MODULES.url['resolveScript']({scriptId, deploymentId, params, returnExternalUrl}));
     },
-    'getFranchiseeOfCustomer' : function (response, {customerId, fieldIds}) {
+    'getFranchiseeOfCustomer' : function (response, {customerId}) {
         let partner = {};
         try {
             let result = NS_MODULES.search['lookupFields']({
@@ -273,8 +277,9 @@ const getOperations = {
                 id: customerId,
                 columns: ['partner']
             });
-            let partnerRecord = NS_MODULES.record.load({type: 'partner', id: result.partner ? result.partner[0].value : ''})
-            for (let fieldId of fieldIds) {
+            let partnerRecord = NS_MODULES.record.load({type: 'partner', id: result.partner ? result.partner[0].value : ''});
+            partner['id'] = partnerRecord.getValue({fieldId: 'id'});
+            for (let fieldId of Object.keys(franchiseeDetails)) {
                 partner[fieldId] = partnerRecord['getValue']({fieldId});
                 partner[fieldId + '_text'] = partnerRecord['getText']({fieldId});
             }
@@ -283,6 +288,13 @@ const getOperations = {
             //
         }
         _writeResponseJson(response, partner);
+    },
+    'getFileURLById' : function (response, {fileId}) {
+        let {file} = NS_MODULES;
+
+        let fileObj = file.load({id: fileId});
+
+        _writeResponseJson(response, {fileURL: fileObj.url});
     },
 }
 
@@ -395,16 +407,49 @@ const postOperations = {
         let commRegRecord = record.create({type: 'customrecord_commencement_register'});
 
         for (let fieldId in commRegData) {
-            let value = commRegData[fieldId];
-            if (isoStringRegex.test(commRegData[fieldId]) && ['date', 'datetimetz'].includes(commRegRecord['getField']({fieldId})?.type))
-                value = new Date(commRegData[fieldId]);
-
-            commRegRecord.setValue({fieldId, value});
+            if (!commRegRecord['getField']({fieldId})) continue;
+            const isDateField = isoStringRegex.test(commRegData[fieldId]) && ['date', 'datetimetz'].includes(commRegRecord['getField']({fieldId})?.type);
+            commRegRecord.setValue({fieldId, value: isDateField ? new Date(commRegData[fieldId]) : commRegData[fieldId]});
         }
 
         let commRegId = commRegRecord.save({ignoreMandatoryFields: true});
 
-        _writeResponseJson(response, commRegId); // return the first result
+        _writeResponseJson(response, commRegId);
+    },
+    'saveOrCreateCommencementRegister' : function (response, {commRegId, commRegData, fileContent, fileName}) {
+        let {log, file, record} = NS_MODULES;
+
+        // Save the uploaded pdf file and get its ID only when fileContent and fileName are present
+        if (fileContent && fileName) {
+            let fileExtension = fileName.split('.').pop().toLowerCase();
+
+            if (fileExtension === 'pdf') {
+                commRegData['custrecord_scand_form'] = file.create({
+                    name: fileName,
+                    fileType: file.Type['PDF'],
+                    contents: fileContent,
+                    folder: 1212243,
+                }).save();
+            } else log.debug({title: "saveCommencementRegister", details: `fileExtension: ${fileExtension}`});
+        }
+
+        // Save the commencement register record
+        let commRegRecord = commRegId ?
+            record.load({type: 'customrecord_commencement_register', id: commRegId}) :
+            record.create({type: 'customrecord_commencement_register'});
+
+        for (let fieldId in commRegData) {
+            const nsField = commRegRecord['getField']({fieldId});
+
+            if (!nsField) continue;
+
+            const isDateField = ['date', 'datetimetz'].includes(nsField?.type) && isoStringRegex.test(commRegData[fieldId]);
+            NS_MODULES.log.debug('', `[${fieldId}] is date field: ${isDateField}`)
+
+            commRegRecord.setValue({fieldId, value: isDateField ? new Date(commRegData[fieldId]) : commRegData[fieldId]});
+        }
+
+        _writeResponseJson(response, {commRegId: commRegRecord.save({ignoreMandatoryFields: true})});
     },
     'updateServiceRatesOfCustomer' : function (response, {customerId, commRegId}) {
         let {monthlyServiceRate, monthlyExtraServiceRate, monthlyReducedServiceRate} = _calculateServiceRates(customerId, commRegId);

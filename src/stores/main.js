@@ -9,6 +9,7 @@ import {useSalesRecordStore} from '@/stores/sales-record';
 import {useServiceStore} from '@/stores/services';
 import {useDataStore} from '@/stores/data';
 import {useFranchiseeStore} from '@/stores/franchisee';
+import {useMiscStore} from '@/stores/misc';
 
 getWindowContext().document.title = `${VARS.pageTitle} - NetSuite Australia (Mail Plus Pty Ltd)`
 
@@ -36,6 +37,7 @@ const getters = {
 const actions = {
     async init() {
         useUserStore().init().then();
+        useMiscStore().init().then();
         await _readUrlParams(this);
 
         await Promise.allSettled([
@@ -44,7 +46,7 @@ const actions = {
             useDataStore().init(),
         ]);
 
-        useFranchiseeStore().init().then();
+        await useFranchiseeStore().init();
         await useCommRegStore().init();
         await useServiceStore().init();
 

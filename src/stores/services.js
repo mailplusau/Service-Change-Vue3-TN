@@ -198,7 +198,6 @@ async function _saveServiceChange(ctx) {
             offsetDateObjectForNSDateField(ctx.globalEffectiveDate),
             offsetDateObjectForNSDateField(ctx.globalTrialEndDate) || '',
             offsetDateObjectForNSDateField(getNextWorkingDate(ctx.globalTrialEndDate)) || '');
-
     }
 
     serviceChangeData['custrecord_servicechg_comm_reg'] = useCommRegStore().id;

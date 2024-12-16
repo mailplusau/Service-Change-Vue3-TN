@@ -17,6 +17,8 @@ export function getWindowContext() {
     else return top;
 }
 
+export const isoTestString = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z?$/;
+
 export const rules = {
     email(value, fieldName = 'This field') {
         return !value || /.+@.+\..+/.test(value) || `${fieldName} must be a valid email`;
@@ -28,7 +30,10 @@ export const rules = {
         return (value && value.length >= length) || `${fieldName} must be more than ${length} characters`;
     },
     minValue(value, fieldName = 'This field', min) {
-        return !value || parseFloat(value) >= parseFloat(min) || `${fieldName} must be greater than ${parseFloat(min)}`;
+        return !value || parseFloat(value) >= parseFloat(min) || `${fieldName} must be greater than or equal to ${parseFloat(min)}`;
+    },
+    greaterThan(value, fieldName = 'This field', min) {
+        return !value || parseFloat(value) > parseFloat(min) || `${fieldName} must be greater than ${parseFloat(min)}`;
     },
     abn(value, fieldName = 'This field') {
         if (!value) return true;
@@ -119,4 +124,19 @@ export function debounce(fn, wait){
             fn.apply(context, args); // call the function if time expires
         }, wait);
     }
+}
+
+export function readFileAsBase64(fileObject) {
+    return new Promise((resolve, reject) => {
+        if (!fileObject) resolve(null);
+
+        let reader = new FileReader();
+
+        reader.onload = (event) => {
+            try {
+                resolve(event.target.result.split(',')[1]);
+            } catch (e) {reject(e);}
+        }
+        reader.readAsDataURL(fileObject);
+    });
 }

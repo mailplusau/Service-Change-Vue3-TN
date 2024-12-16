@@ -37,17 +37,22 @@ function update() {
     emit('dateChanged', selectedDate.value);
 }
 
+function clearInput() {
+    model.value = '';
+    selectedDate.value = null;
+}
+
 watch(dialogOpen, (val) => {
-    if (val) selectedDate.value = model.value;
+    if (val) selectedDate.value = model.value || null;
 })
 
-const displayDate = computed(() => dateFormat.format(model.value))
+const displayDate = computed(() => model.value ? dateFormat.format(model.value) : '')
 </script>
 
 <template>
     <v-dialog width="unset" v-model="dialogOpen">
         <template v-slot:activator="{ props: activatorProps }">
-            <slot name="activator" :activatorProps="props.disabled ? null : activatorProps" :displayDate="displayDate" :readonly="props.readonly"></slot>
+            <slot name="activator" :activatorProps="props.disabled ? null : activatorProps" :displayDate="displayDate" :readonly="props.readonly" :clearInput="clearInput"></slot>
         </template>
 
         <template v-slot:default="{ isActive }">

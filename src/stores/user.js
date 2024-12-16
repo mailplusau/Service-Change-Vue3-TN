@@ -2,13 +2,13 @@ import { defineStore } from 'pinia';
 import http from '@/utils/http.mjs';
 
 const state = {
-    id: null,
+    id: 1732844,
     role: null,
-    isMe : state => state.id === 1732844,
 };
 
 const getters = {
-    isAdmin : state => [3, 1032].includes(state.role)
+    isAdmin : state => [3, 1032].includes(state.role),
+    isMe : state => state.id === 1732844,
 };
 
 const actions = {

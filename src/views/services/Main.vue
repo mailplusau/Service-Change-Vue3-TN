@@ -1,24 +1,22 @@
 <script setup>
 import {computed} from 'vue';
-import ServiceChangeRow from '@/views/services/components/ServiceChangeRow.vue';
+import {useMainStore} from '@/stores/main';
 import {useServiceStore} from '@/stores/services';
+import {useUserStore} from '@/stores/user';
+import {useCommRegStore} from '@/stores/comm-reg';
+import ServiceChangeRow from '@/views/services/components/ServiceChangeRow.vue';
 import ServiceChangeDialog from '@/views/services/components/ServiceChangeDialog.vue';
 import DatePicker from '@/components/shared/DatePicker.vue';
 import ServiceCancellationDialog from '@/views/services/components/ServiceCancellationDialog.vue';
-import {useMainStore} from '@/stores/main';
 import ServiceFinalisationDialog from '@/views/services/components/ServiceFinalisationDialog.vue';
-import {useUserStore} from '@/stores/user';
-import {useCommRegStore} from '@/stores/comm-reg';
-import {formatDate} from '../../utils/utils.mjs';
+import {formatDate, formatPrice} from '../../utils/utils.mjs';
+import CommRegEditorDialog from '@/views/services/components/CommRegEditorDialog.vue';
+import {COMM_REG_STATUS} from '@/utils/defaults.mjs';
 
 const userStore = useUserStore();
 const serviceStore = useServiceStore();
 const mainStore = useMainStore();
 const commRegStore = useCommRegStore();
-const AUDollar = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'AUD',
-});
 
 const expanded = computed(() => [...serviceStore.data.all.map(item => item.internalid)])
 const freqTerms = ['mon', 'tue', 'wed', 'thu', 'fri', 'adhoc'];
@@ -35,10 +33,6 @@ const headers = [
 
     {value: 'actions', title: '', sortable: false, align: 'end'},
 ]
-
-function formatCurrency(value) {
-    return AUDollar.format(value);
-}
 
 function closeParentDialog() {
     if (parent['closeServiceAndPriceDialog']) parent['closeServiceAndPriceDialog']();
@@ -123,7 +117,7 @@ const minTrialExpiryDate = computed(() => {
                     </template>
 
                     <template v-slot:[`item.custrecord_service_price`]="{ item }">
-                        {{ formatCurrency(item.custrecord_service_price) }}
+                        {{ formatPrice(item.custrecord_service_price) }}
                     </template>
 
                     <template v-for="term in freqTerms" v-slot:[`item.custrecord_service_day_${term}`]="{ item }">
@@ -147,11 +141,32 @@ const minTrialExpiryDate = computed(() => {
 
                 </v-data-table>
 
-            </v-col>
-        </v-row>
 
-        <v-row v-if="userStore.isMe">
-            <p>Comm Reg ID: [{{commRegStore.id}}]</p>
+                <v-toolbar class="elevation-5 bg-primary text-caption" density="compact" v-if="userStore.isMe">
+                    <template v-if="commRegStore.id">
+                        <span class="ml-4 mr-1">Status:</span>
+                        <i class="text-secondary">{{ parseInt(commRegStore.details.custrecord_trial_status) === COMM_REG_STATUS.Waiting_TNC
+                            ? 'Awaiting T&C' : commRegStore.texts.custrecord_trial_status }}</i>
+
+                        <span class="ml-4 mr-1">Type:</span>
+                        <i class="text-secondary">{{ commRegStore.texts.custrecord_sale_type }}</i>
+
+                        <span class="ml-4 mr-1">Commencement Form:</span>
+                        <i class="text-secondary" v-if="commRegStore.details.custrecord_scand_form">
+                            <u>{{ commRegStore.details.custrecord_scand_form }}</u>
+                        </i>
+                        <b class="text-red" v-else><u>Not Specified</u></b>
+                    </template>
+
+                    <v-spacer></v-spacer>
+
+                    <CommRegEditorDialog />
+                </v-toolbar>
+
+            </v-col>
+            <v-col cols="12" v-if="userStore.isMe">
+                <p>Comm Reg ID: [{{commRegStore.id}}]</p>
+            </v-col>
         </v-row>
 
         <ServiceChangeDialog />
