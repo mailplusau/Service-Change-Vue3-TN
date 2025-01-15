@@ -236,56 +236,6 @@ function injectEnvVariables(fileContent) {
     return fileContent;
 }
 
-// This can only import statements for objects and arrays. Function imports do not work.
-async function injectImportStatements(fileContent) {
-    let importStatements = [];
-
-    do {
-        importStatements = [...(await parseImports(fileContent))];
-
-        if (!importStatements.length) continue;
-
-        let $import = importStatements.pop();
-        let moduleContents = await import($import.moduleSpecifier.value.replaceAll('@/', './src/'));
-
-        if ($import.importClause.default)
-            fileContent = replaceBetween(fileContent, $import.startIndex, $import.endIndex,
-                `const ${$import.importClause.default} = ${JSON.stringify(moduleContents[$import.importClause.default])};\r\n`);
-        else if ($import.importClause.named.length) {
-            let originalImport = fileContent.substring($import.startIndex, $import.endIndex);
-            let replacement = `\r\n// ${originalImport}\r\n`;
-
-            for (let item of $import.importClause.named) {
-                let funcArr = [];
-
-                // First we let stringify() replace the functions with their toString()
-                let content = JSON.stringify(moduleContents[item.specifier] || moduleContents['default'], function(key, value) {
-                    if (typeof value === 'function') {
-                        let txt = value.toString()
-                            .replace(`${key}()`, '()=>') // replace function name with arrow function
-                            .replace(/(\s+)\s+/g, '') // trim all white space characters that aren't alone
-                            .replace(/(\r\n|\r|\n)/g, ''); // trim all new line characters
-                        funcArr.push(txt);
-                        return txt;
-                    }
-                    else return value;
-                });
-
-                // Then we replace the double quotes around the functions to make them usable
-
-                for (let item of funcArr) content = content.replace(`${JSON.stringify(item)}`, item);
-
-                replacement += `const ${item.binding} = ${content};\r\n`;
-            }
-
-            fileContent = replaceBetween(fileContent, $import.startIndex, $import.endIndex, replacement);
-        }
-
-    } while (importStatements.length > 0);
-
-    return fileContent;
-}
-
 function replaceBetween(original, start, end, what) {
     return original.substring(0, start) + what + original.substring(end);
 }
@@ -303,8 +253,8 @@ function resolveFilename(filePath, fileContent) {
     };
 
     const variableTransformationTable = {
-        "let htmlTemplateFilename/**/;": `let htmlTemplateFilename = '${getHtmlFilename()}';`,
-        "let clientScriptFilename/**/;": `let clientScriptFilename = '${nameTransformationTable['client_script.js']}';`
+        "var htmlTemplateFilename;": `var htmlTemplateFilename = '${getHtmlFilename()}';`,
+        "var clientScriptFilename;": `var clientScriptFilename = '${nameTransformationTable['client_script.js']}';`
     };
 
     for (let filename in nameTransformationTable) filePath = filePath.replace(filename, nameTransformationTable[filename]);
@@ -325,17 +275,29 @@ function getHtmlFilename() {
     if (fs.existsSync(filePathLocal)) {
         let fileContent = fs.readFileSync(filePathLocal, 'utf8');
 
-        if (process.argv.includes('resolve:env'))
-            fileContent = injectEnvVariables(fileContent);
+        if (process.argv.includes('resolve:dependencies')) {
+            const result = require("esbuild").buildSync({
+                entryPoints: [filePathLocal],
+                target: [`node16`],
+                platform: 'node',
+                format: 'esm',
+                bundle: true,
+                write: false,
+                alias: {
+                    '@': './src',
+                },
+            })
 
-        if (process.argv.includes('resolve:imports'))
-            fileContent = await injectImportStatements(fileContent);
+            fileContent = fileContent.substring(0, fileContent.indexOf(' */') + 5) + '\r\n' + result['outputFiles'][0].text;
+            fileContent = injectEnvVariables(fileContent);
+        }
 
         let filePathNetSuite = filePathLocal;
 
         if (!process.argv[2]) // no file name argument, we're uploading the index.html file
             filePathNetSuite = filePathNetSuite.replace('index.html', getHtmlFilename());
-        else if (process.argv.includes('resolve:filenames')) {
+
+        if (process.argv.includes('resolve:filenames')) {
             let tmp = resolveFilename(filePathLocal, fileContent);
             filePathNetSuite = tmp.filePath;
             fileContent = tmp.fileContent;
