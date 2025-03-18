@@ -75,6 +75,13 @@ async function saveServiceChange() {
     return true;
 }
 
+function getPriceRule(v) {
+    if (parseInt(serviceStore.changeDialog.form.serviceType) === 9)
+        return rules.validate(v, userStore.isAdmin ? 'required|minValue:0' : 'required|minValue:1', 'Price');
+
+    return rules.validate(v, 'required|minValue:0', 'Price');
+}
+
 </script>
 
 <template>
@@ -108,7 +115,7 @@ async function saveServiceChange() {
                     <v-col :cols="!serviceStore.changeDialog.form.custrecord_servicechg_service ? 8 : 12">
                         <v-text-field label="Price" class="v-text-field-primary-color-input"
                                       placeholder="0.00" step="0.01" color="primary"
-                                      :rules="[v => validate(v, 'required|minValue:0', 'Price')]"
+                                      :rules="[getPriceRule]"
                                       persistent-placeholder
                                       type="number" variant="outlined" density="compact"
                                       v-model="serviceStore.changeDialog.form.custrecord_servicechg_new_price">
