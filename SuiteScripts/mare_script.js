@@ -8,7 +8,8 @@
  * Should be scheduled to run at 4AM AEST every day.
  */
 
-import {COMM_REG_STATUS, commReg as commRegFields, SERVICE_CHANGE_STATUS, serviceChange as serviceChangeFields, serviceFieldIds} from '@/utils/defaults.mjs';
+import {COMM_REG_STATUS, SERVICE_CHANGE_STATUS} from '@/utils/defaults.mjs';
+import { getServiceChangesByFilters, getCommRegsByFilters, getServicesByFilters } from 'netsuite-shared-modules';
 
 let NS_MODULES = {};
 
@@ -43,7 +44,7 @@ define(moduleNames.map(item => 'N/' + item), (...args) => {
             }
         })
 
-        _.getCustomersWithPendingFinancialItems(today, judgementDay).forEach(customerId => {
+        _.getCustomersToCheckPendingFinancialItems(today, judgementDay).forEach(customerId => {
             tasks['PendingCustomer_' + customerId] = {
                 customerToUpdateFinancialItems: customerId,
                 shouldUpdateFinancialItems
@@ -64,7 +65,7 @@ define(moduleNames.map(item => 'N/' + item), (...args) => {
         } else if (ctx.key.includes('InTrialCommReg')) {
             _.processInTrialCommReg(ctx, value['inTrialCommReg'])
         } else if (ctx.key.includes('PendingCustomer')) {
-            _.processPendingCustomer(value['customerToUpdateFinancialItems'], ctx)
+            _.processPendingCustomer(ctx, value['customerToUpdateFinancialItems'], true)
         }
     }
 
@@ -83,40 +84,6 @@ define(moduleNames.map(item => 'N/' + item), (...args) => {
 });
 
 const utils = {
-    getServiceChangesByFilters(filters) {
-        let data = [];
-
-        NS_MODULES.search.create({
-            type: "customrecord_servicechg",
-            filters,
-            columns: Object.keys(serviceChangeFields)
-        }).run().each(result => this.processSavedSearchResults(data, result));
-
-        return data;
-    },
-    getServicesByFilters(filters) {
-        let data = [];
-
-        NS_MODULES.search.create({
-            type: "customrecord_service",
-            filters,
-            columns: serviceFieldIds
-        }).run().each(result => this.processSavedSearchResults(data, result));
-
-        return data;
-    },
-    getCommRegsByFilters(filters) {
-        let data = [];
-
-        NS_MODULES.search.create({
-            type: "customrecord_commencement_register",
-            filters,
-            columns: Object.keys(commRegFields)
-        }).run().each(result => this.processSavedSearchResults(data, result));
-
-        return data;
-    },
-
     getToday() {
         let today = new Date();
         today.setTime(today.getTime() + (18)*60*60*1000); // this should be today, so we add <whatever the timezone offset is> (18 in this case)
@@ -127,20 +94,6 @@ const utils = {
         let formatted = parseFloat(price).toFixed(2);
         return formatted === 'NaN' ? price : '$' + formatted;
     },
-
-    processSavedSearchResults(data, result) {
-        let obj = {};
-
-        obj['internalid'] = result.id;
-        for (let column of result['columns']) {
-            obj[column.name + '_text'] = result['getText'](column);
-            obj[column.name] = result['getValue'](column);
-        }
-        data.push(obj);
-
-        return true;
-    },
-    
     handleErrorIfAny(summary) {
         let inputSummary = summary['inputSummary'];
         let mapSummary = summary['mapSummary'];
@@ -163,7 +116,7 @@ const utils = {
 
 const _ = {
     getScheduledCommRegs() {
-        return utils.getCommRegsByFilters([ // get all scheduled comm regs with effective date on or before tomorrow that has T&C Agreement
+        return getCommRegsByFilters(NS_MODULES, [ // get all scheduled comm regs with effective date on or before tomorrow that has T&C Agreement
             ['custrecord_trial_status', 'anyOf'.toLowerCase(), COMM_REG_STATUS.Scheduled], // Scheduled (9)
             'AND',
             ['custrecord_comm_date', 'onOrBefore'.toLowerCase(), 'today'],
@@ -174,35 +127,27 @@ const _ = {
         ]);
     },
     getInTrialCommRegs() {
-        return utils.getCommRegsByFilters([ // get all In Trial comm regs with billing date being tomorrow
+        return getCommRegsByFilters(NS_MODULES, [ // get all In Trial comm regs with billing date being tomorrow
             ['custrecord_trial_status', 'anyOf'.toLowerCase(), COMM_REG_STATUS.In_Trial], // Scheduled (9)
             'AND',
             ['custrecord_bill_date', 'on', 'tomorrow'],
         ]);
     },
-    getCustomersWithPendingFinancialItems(today, judgementDay) {
+    getCustomersToCheckPendingFinancialItems(today, judgementDay) {
         if (today.getDate() !== judgementDay) return []; // this should only run on judgement day
-        
+
         const customerIds = [];
-        
-        utils.getCommRegsByFilters([
+
+        getCommRegsByFilters(NS_MODULES, [
             ['custrecord_customer.status', 'anyOf'.toLowerCase(), '13'], // only Signed (13) customer
             'AND',
             ['custrecord_comm_date', 'within', `1/${today.getMonth() + 1}/${today.getFullYear()}`, `${judgementDay}/${today.getMonth() + 1}/${today.getFullYear()}`],
             'AND',
             ['custrecord_trial_status','anyOf'.toLowerCase(), COMM_REG_STATUS.Signed], // comm reg is Signed (2)
         ], ['CUSTRECORD_CUSTOMER.entitystatus']).forEach(signedCommReg => {
-
-            const changedCommRegs = utils.getCommRegsByFilters([ // get changed comm regs from the associated customer
-                ['custrecord_trial_status', 'is', COMM_REG_STATUS.Changed],
-                'AND',
-                ['custrecord_customer', 'is', signedCommReg['custrecord_customer']]
-            ]);
-
-            if (changedCommRegs.length) // if this customer has other comm regs with Changed (7) status, we add it to the to-update list
-                customerIds.push(signedCommReg['custrecord_customer'])
+            customerIds.push(signedCommReg['custrecord_customer'])
         });
-        
+
         return customerIds;
     },
 
@@ -211,7 +156,7 @@ const _ = {
         let hasPreviouslySignedCommRegs;
 
         // Find all Signed comm reg of the customer that the scheduled comm reg is associated to apply Changed (7) status to them
-        utils.getCommRegsByFilters([
+        getCommRegsByFilters(NS_MODULES, [
             ['custrecord_trial_status', 'anyof', COMM_REG_STATUS.Signed, COMM_REG_STATUS.Changed],
             'AND',
             ['custrecord_customer', 'is', scheduledCommReg['custrecord_customer']]
@@ -233,14 +178,14 @@ const _ = {
         });
 
         // Find all service changes of Scheduled Comm Regs and execute them
-        utils.getServiceChangesByFilters([
+        getServiceChangesByFilters(NS_MODULES, [
             ['custrecord_servicechg_status', 'anyOf'.toLowerCase(), SERVICE_CHANGE_STATUS.Scheduled, SERVICE_CHANGE_STATUS.Quote], // Scheduled (1) or Quote (4)
             'AND',
             ['custrecord_servicechg_comm_reg', 'is', scheduledCommReg['internalid']]
         ]).forEach(scheduledServiceChange => {
 
             // Make all previously active service changes of affected service Ceased (3)
-            utils.getServiceChangesByFilters([
+            getServiceChangesByFilters(NS_MODULES, [
                 ['custrecord_servicechg_status', 'is', SERVICE_CHANGE_STATUS.Active], // Active (2)
                 'AND',
                 ['custrecord_servicechg_service', 'is', scheduledServiceChange['custrecord_servicechg_service']]
@@ -256,11 +201,11 @@ const _ = {
         });
 
         if (isFreeTrial || !hasPreviouslySignedCommRegs || (hasPreviouslySignedCommRegs && shouldUpdateFinancialItems))
-            this.processPendingCustomer(scheduledCommReg['custrecord_customer'], ctx)
+            this.processPendingCustomer(ctx, scheduledCommReg['custrecord_customer'], false)
     },
     processInTrialCommReg(ctx, inTrialCommReg) {
         // Find all service changes of In-Trial Comm Regs and apply the correct price
-        utils.getServiceChangesByFilters([ // get active service changes
+        getServiceChangesByFilters(NS_MODULES, [ // get active service changes
             ['custrecord_servicechg_status', 'is', SERVICE_CHANGE_STATUS.Active], // Active (2)
             'AND',
             ['custrecord_servicechg_comm_reg', 'is', inTrialCommReg['internalid']]
@@ -281,9 +226,19 @@ const _ = {
             values: { custrecord_trial_status: COMM_REG_STATUS.Signed, }
         });
 
-        this.processPendingCustomer(inTrialCommReg['custrecord_customer'], ctx)
+        this.processPendingCustomer(ctx, inTrialCommReg['custrecord_customer'], false)
     },
-    processPendingCustomer(customerId, ctx) {
+    processPendingCustomer(ctx, customerId, checkForChangedCommRegs = true) {
+        const changedCommRegs = getCommRegsByFilters(NS_MODULES, [ // get changed comm regs from the associated customer
+            ['custrecord_trial_status', 'is', COMM_REG_STATUS.Changed],
+            'AND',
+            ['custrecord_customer', 'is', customerId]
+        ]);
+
+        // if this customer no other comm regs with Changed (7) status, we don't update financial tab
+        if (checkForChangedCommRegs && !changedCommRegs.length) return;
+        NS_MODULES.log.debug('processPendingCustomer', `customerId: ${customerId}`)
+
         const customerRecord = NS_MODULES.record.load({type: 'customer', id: customerId, isDynamic: true});
         const sublistId = 'itemPricing'.toLowerCase();
 
@@ -301,7 +256,7 @@ const _ = {
         for (let line = lineCount - 1; line >= 0; line--) customerRecord['removeLine']({sublistId, line});
 
         // Re-populate financial tab using only active services
-        utils.getServicesByFilters([
+        getServicesByFilters(NS_MODULES, [
             ['isinactive', 'is', false],
             'AND',
             ['custrecord_service_category', 'is', 1], // We take records under the Category: Services (1) only
@@ -327,6 +282,13 @@ const _ = {
 
             customerRecord['commitLine']({sublistId});
         });
+
+        // Update pricing notes
+        const today = utils.getToday();
+        let pricingNotes = `${today.getDate()}/${today.getMonth() + 1}/${today.getFullYear()}\n`;
+        for (let service of report.services) pricingNotes += ` ${service.name} - @${utils.formatCurrency(service.price)} - ${service.frequency}\n`;
+        pricingNotes = pricingNotes + '\n' + customerRecord.getValue({fieldId: 'custentity_customer_pricing_notes'});
+        customerRecord.setValue({fieldId: 'custentity_customer_pricing_notes', value: pricingNotes})
 
         ctx.write({key: 'CustomerReport_' + customerId, value: report });
 
@@ -455,21 +417,12 @@ const _ = {
         emailHtml += financialItemsReports.length ? `<p>The following customers have had their Financial Items updated:</p>` : '<p>No update to financial items of any customer.</p>';
 
         for (let report of financialItemsReports) {
-            const customerRecord = NS_MODULES.record.load({type: 'customer', id: report.customer.id});
-            let pricingNotes = `${today.getDate()}/${today.getMonth() + 1}/${today.getFullYear()}\n`;
             emailContent += `<tr><td colspan="3"><b><u>${report.customer.entityId} ${report.customer.companyName} (ID: ${report.customer.id})</u></b></td></tr>`;
 
-            for (let service of report.services) {
-                pricingNotes += ` ${service.name} - @${utils.formatCurrency(service.price)} - ${service.frequency}\n`;
+            for (let service of report.services)
                 emailContent += `<tr><td>${service.name}</td><td>Price: ${utils.formatCurrency(service.price)}</td><td>Frequency: ${service.frequency}</td></tr>`;
-            }
 
             emailContent += `<tr><td colspan="3"><br></td></tr>`;
-            pricingNotes = pricingNotes + '\n' + customerRecord.getValue({fieldId: 'custentity_customer_pricing_notes'});
-
-            try {
-                NS_MODULES.record['submitFields']({type: 'customer', id: report.customer.id, values: {'custentity_customer_pricing_notes': pricingNotes}});
-            } catch (e) { utils.handleError(e, `Failed to save Price Notes for customer ID ${report.customer.id}<br>Price Notes: ${pricingNotes}`) }
         }
 
         emailHtml += `<table>${emailContent}</table>`

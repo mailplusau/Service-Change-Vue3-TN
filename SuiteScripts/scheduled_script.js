@@ -257,22 +257,22 @@ function _informFranchiseeOfFreeTrialCustomer(scheduledCommReg) {
 
     try {
         let {search, record, https, url, email, format, file} = NS_MODULES;
-        let commReg = record.load({type: 'customrecord_commencement_register', id: scheduledCommReg['internalid']});
         let salesRecord = record.load({type: 'customrecord_sales', id: scheduledCommReg['custrecord_commreg_sales_record']});
+        let commReg = record.load({type: 'customrecord_commencement_register', id: scheduledCommReg['internalid']});
         let salesRecordValues = search['lookupFields']({
             type: 'customrecord_sales',
             id: scheduledCommReg['custrecord_commreg_sales_record'],
             columns: ['custrecord_sales_campaign', 'custrecord_sales_assigned.internalid', 'custrecord_sales_assigned.email']
         })
-        let customerId = scheduledCommReg['custrecord_customer'];
         let attachments = [];
+        let customerId = scheduledCommReg['custrecord_customer'];
         let franchiseeEmail = search['lookupFields']({
             type: 'customer',
             id: customerId,
             columns: ['partner.email']
         })['partner.email'];
-        let billingStartDate = null;
         let trialExpiryDate = commReg.getValue({fieldId: 'custrecord_trial_expiry'});
+        let billingStartDate = null;
 
         if (trialExpiryDate) {
             billingStartDate = new Date(trialExpiryDate.toISOString());
@@ -286,8 +286,8 @@ function _informFranchiseeOfFreeTrialCustomer(scheduledCommReg) {
             filters:
                 [
                     ["isinactive", "is", "F"], 'AND',
-                    ["company", "is", customerId], 'AND',
-                    ['email', 'isnotempty', '']
+                    ['email', 'isnotempty', ''], 'AND',
+                    ["company", "is", customerId]
                 ],
             columns: ['internalid']
         }).run().each(resultSet => {
@@ -299,8 +299,8 @@ function _informFranchiseeOfFreeTrialCustomer(scheduledCommReg) {
                     params: {
                         script: 395,
                         deploy: 1,
-                        compid: 1048144,
                         'ns-at': 'AAEJ7tMQgAVHkxJsbXgGwQQm4xn968o7JJ9-Ym7oanOzCSkWO78',
+                        compid: 1048144,
                         rectype: 'customer',
                         template: templateId,
                         recid: customerId,
@@ -318,9 +318,9 @@ function _informFranchiseeOfFreeTrialCustomer(scheduledCommReg) {
 
             email.send({
                 author: salesRecordValues['custrecord_sales_assigned.internalid'][0]['value'],
+                recipients: [franchiseeEmail],
                 subject: emailTemplateRecord.getValue({fieldId: 'custrecord_camp_comm_subject'}),
                 body: emailHtml,
-                recipients: [franchiseeEmail],
                 cc: [
                     salesRecordValues['custrecord_sales_assigned.email'],
                     ...(parseInt(salesRecordValues['custrecord_sales_campaign'][0]['value']) === 69 ? ['kerry.oneill@mailplus.com.au'] : [])
